@@ -147,17 +147,18 @@ Se han verificado los siguientes puntos con evidencia real:
 - La base de datos y Redis están disponibles.
 - El frontend está construido y sirve la marca correcta.
 - Login local (usuario/contraseña) funciona de extremo a extremo con sesión + CSRF.
-- Google OAuth está planteado en la arquitectura pero requiere configuración real de credenciales en `.env`.
+- Google OAuth configurado con credenciales reales en `.env` local (no versionadas).
+  - `LOGIN_REDIRECT_URL = "/"` -> tras autenticar vuelve al dashboard SPA y el frontend recupera la sesión vía `me()`.
+  - Callback: `http://localhost/auth/complete/google-oauth2/` (debe registrarse como Authorized redirect URI en Google Cloud Console).
 - CRUD de universidades funcional (frontend + backend) con `short_name` e `is_active`.
 - CRUD de unidades académicas (`AcademicsHome`) conectado a la API.
 - Existe un superusuario local `admin` (creado en estas tareas; sin commitear credenciales reales).
 
 ### Siguientes tareas recomendadas
 
-1. Configurar OAuth real de Google
-   - Completar `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, URLs y callback en `.env` para autenticación real.
-   - Revisar `LOGIN_REDIRECT_URL` (idealmente apuntar al dashboard SPA `/` para que el frontend recupere la sesión tras OAuth).
-   - Verificar que el flujo funcione con el dominio correcto y credenciales no comprometidas.
+1. Registrar/verificar URIs de redirección en Google Cloud Console
+   - Confirmar que `http://localhost/auth/complete/google-oauth2/` esté en Authorized redirect URIs de la OAuth Client.
+   - Probar el flujo completo en el navegador (botón "Sign in with Google" -> volver al dashboard).
 
 2. Conectar Unidad Académica y Sede
    - `UnidadAcademica.tsx` y `Sede.tsx` son placeholders; falta CRUD real para ambos.
@@ -194,4 +195,4 @@ docker compose restart nginx
 
 ### Resumen ejecutivo
 
-La base del proyecto está preparada, dockerizada y validada con branding de Academix corregido. Ya están funcionales: autenticación local, protección de rutas, zoom y tema persistidos, CRUD de universidades y CRUD de unidades académicas conectados a la API bajo `/api/`. Queda pendiente: OAuth real de Google (credenciales en `.env`), CRUD de Unidad Académica y Sede, y la expansión del dominio académico. El siguiente agente debe centrarse en la configuración real de OAuth y en los CRUD pendientes, manteniendo la seguridad y la estructura ya validada.
+La base del proyecto está preparada, dockerizada y validada con branding de Academix corregido. Ya están funcionales: autenticación local, Google OAuth (credenciales reales en `.env`, `LOGIN_REDIRECT_URL="/"`, callback `/auth/complete/google-oauth2/`), protección de rutas, zoom y tema persistidos, CRUD de universidades y CRUD de unidades académicas conectados a la API bajo `/api/`. Queda pendiente: verificar las URIs de redirección de Google Cloud Console, CRUD de Unidad Académica y Sede, y la expansión del dominio académico. El siguiente agente debe centrarse en los CRUD pendientes y la expansión del dominio, manteniendo la seguridad y la estructura ya validada.

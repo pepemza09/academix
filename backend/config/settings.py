@@ -69,7 +69,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:5173"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=["http://localhost:5173"])
 LOGIN_URL = "/api/auth/login/"
-LOGIN_REDIRECT_URL = "/api/auth/me/"
+LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 AUTHENTICATION_BACKENDS = ("social_core.backends.google.GoogleOAuth2", "django.contrib.auth.backends.ModelBackend")
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = env("GOOGLE_CLIENT_ID", default="")
