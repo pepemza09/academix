@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Academix: proyectos de referencia externos (no se versionan)
+autoskills/
+template/
+
