@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AcademicUnit, Campus, University, Career
+from .models import AcademicUnit, Campus, University, Career, StudyPlan
 
 
 @admin.register(University)
@@ -29,3 +29,10 @@ class CareerAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "academic_unit"]
     search_fields = ["code", "short_name", "name"]
     filter_horizontal = ["campuses"]
+
+
+@admin.register(StudyPlan)
+class StudyPlanAdmin(admin.ModelAdmin):
+    list_display = ["code", "title", "career", "is_active", "is_current"]
+    list_filter = ["is_active", "is_current", "career"]
+    search_fields = ["code", "title"]

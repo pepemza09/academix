@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
-from apps.academics.models import AcademicUnit, Campus, Career, University
+from apps.academics.models import AcademicUnit, Campus, Career, StudyPlan, University
 
 
 class UniversitySerializer(serializers.ModelSerializer):
@@ -145,12 +145,48 @@ class CareerViewSet(viewsets.ModelViewSet):
     serializer_class = CareerSerializer
     permission_classes = [IsAuthenticated]
 
+    def destroy(self, request, *args, **kwargs):
+        career = self.get_object()
+        if career.study_plans.exists():
+            return Response(
+                {
+                    "detail": "No se puede eliminar una carrera que tiene planes de estudio asociados."
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class StudyPlanSerializer(serializers.ModelSerializer):
+    career_name = serializers.CharField(source="career.name", read_only=True)
+    career_code = serializers.CharField(source="career.code", read_only=True)
+
+    class Meta:
+        model = StudyPlan
+        fields = [
+            "id",
+            "code",
+            "title",
+            "career",
+            "career_name",
+            "career_code",
+            "is_active",
+            "is_current",
+        ]
+
+
+class StudyPlanViewSet(viewsets.ModelViewSet):
+    queryset = StudyPlan.objects.select_related("career").all()
+    serializer_class = StudyPlanSerializer
+    permission_classes = [IsAuthenticated]
+
 
 router = DefaultRouter()
 router.register("universities", UniversityViewSet, basename="university")
 router.register("academic-units", AcademicUnitViewSet, basename="academic-unit")
 router.register("campuses", CampusViewSet, basename="campus")
 router.register("careers", CareerViewSet, basename="career")
+router.register("study-plans", StudyPlanViewSet, basename="study-plan")
 
 
 @require_http_methods(["GET"])

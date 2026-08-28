@@ -83,3 +83,28 @@ class Career(models.Model):
 
     def __str__(self) -> str:
         return f"{self.code} - {self.name}"
+
+
+class StudyPlan(models.Model):
+    career = models.ForeignKey(
+        Career, on_delete=models.CASCADE, related_name="study_plans"
+    )
+    code = models.CharField(max_length=30)
+    title = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    is_current = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["career", "code"],
+                name="unique_plan_code_per_career",
+            )
+        ]
+        indexes = [models.Index(fields=["career", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"{self.code} - {self.title}"
