@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
-from apps.academics.models import AcademicUnit, Campus, University
+from apps.academics.models import AcademicUnit, Campus, Career, University
 
 
 class UniversitySerializer(serializers.ModelSerializer):
@@ -76,6 +76,13 @@ class AcademicUnitViewSet(viewsets.ModelViewSet):
                 },
                 status=400,
             )
+        if academic_unit.careers.exists():
+            return Response(
+                {
+                    "detail": "No se puede eliminar una unidad académica que tiene carreras asociadas."
+                },
+                status=400,
+            )
         return super().destroy(request, *args, **kwargs)
 
 
@@ -102,10 +109,40 @@ class CampusViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
+class CareerSerializer(serializers.ModelSerializer):
+    academic_unit_name = serializers.CharField(
+        source="academic_unit.name", read_only=True
+    )
+    campus_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Career
+        fields = [
+            "id",
+            "code",
+            "short_name",
+            "name",
+            "academic_unit",
+            "academic_unit_name",
+            "campuses",
+            "campus_count",
+            "is_active",
+        ]
+
+
+class CareerViewSet(viewsets.ModelViewSet):
+    queryset = Career.objects.prefetch_related("campuses").select_related(
+        "academic_unit"
+    ).annotate(campus_count=Count("campuses"))
+    serializer_class = CareerSerializer
+    permission_classes = [IsAuthenticated]
+
+
 router = DefaultRouter()
 router.register("universities", UniversityViewSet, basename="university")
 router.register("academic-units", AcademicUnitViewSet, basename="academic-unit")
 router.register("campuses", CampusViewSet, basename="campus")
+router.register("careers", CareerViewSet, basename="career")
 
 
 @require_http_methods(["GET"])

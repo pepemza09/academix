@@ -23,6 +23,8 @@ import Home from "./pages/Dashboard/AcademicsHome";
 import Universidad from "./pages/Institucional/Universidad";
 import UnidadAcademica from "./pages/Institucional/UnidadAcademica";
 import Sede from "./pages/Institucional/Sede";
+import Carreras from "./pages/Academica/Carreras";
+import Planes from "./pages/Academica/Planes";
 
 export default function App() {
   return (
@@ -44,6 +46,10 @@ export default function App() {
             <Route path="/universidad" element={<Universidad />} />
             <Route path="/unidad-academica" element={<UnidadAcademica />} />
             <Route path="/sede" element={<Sede />} />
+
+            {/* Académica */}
+            <Route path="/academica/carreras" element={<Carreras />} />
+            <Route path="/academica/planes" element={<Planes />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />

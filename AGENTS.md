@@ -111,12 +111,12 @@ Este archivo sirve como contexto de continuidad para el siguiente agente IA. Deb
 
 - `docker-compose.yml`: orquestación principal del entorno local.
 - `backend/config/settings.py`: configuración global de Django, seguridad y entorno.
-- `backend/config/urls.py`: endpoints API, health, auth y viewsets (University, AcademicUnit, Campus).
-- `backend/apps/academics/models.py`: dominio de `University`, `AcademicUnit` y `Campus`.
-- `backend/apps/academics/migrations/0001_initial.py`, `0002_*` y `0003_campus`: migraciones aplicadas.
+- `backend/config/urls.py`: endpoints API, health, auth y viewsets (University, AcademicUnit, Campus, Career).
+- `backend/apps/academics/models.py`: dominio de `University`, `AcademicUnit`, `Campus` y `Career`.
+- `backend/apps/academics/migrations/0001_initial.py`, `0002_*`, `0003_campus` y `0004_career`: migraciones aplicadas.
 - `backend/apps/academics/tests.py`: validación funcional de los modelos.
 - `frontend/src/api/client.ts`: cliente fetch con cookies, CSRF y manejo de errores.
-- `frontend/src/api/auth.ts`, `universities.ts`, `academicUnits.ts`, `campuses.ts`: servicios API.
+- `frontend/src/api/auth.ts`, `universities.ts`, `academicUnits.ts`, `campuses.ts`, `careers.ts`: servicios API.
 - `frontend/src/components/form/Combobox.tsx`: componente reutilizable de selección con búsqueda (input + lista desplegable filtrable).
 - `frontend/src/context/AuthContext.tsx`: estado de sesión, login, logout y Google.
 - `frontend/src/context/ThemeContext.tsx`: tema dark/light y zoom persistido.
@@ -126,7 +126,8 @@ Este archivo sirve como contexto de continuidad para el siguiente agente IA. Deb
 - `frontend/src/pages/Institucional/Universidad.tsx`: CRUD de universidades.
 - `frontend/src/pages/Institucional/UnidadAcademica.tsx`: CRUD de unidades académicas con combobox de universidad.
 - `frontend/src/pages/Institucional/Sede.tsx`: CRUD de sedes con combobox de unidad académica.
-- `frontend/src/layout/AppSidebar.tsx`: navegación principal (Dashboard + Institucional).
+- `frontend/src/pages/Academica/Carreras.tsx`: CRUD de carreras (facultad + multiselección de sedes) y `frontend/src/pages/Academica/Planes.tsx`: placeholder.
+- `frontend/src/layout/AppSidebar.tsx`: navegación principal (Dashboard + Institucional + Académica).
 - `frontend/index.html`: favicon y título de la pestaña.
 - `frontend/public/images/logo/*.svg`: assets del logo actualizados.
 - `.env` y `.env.example`: secretos y configuración centralizada.
@@ -136,12 +137,12 @@ Este archivo sirve como contexto de continuidad para el siguiente agente IA. Deb
 Se han verificado los siguientes puntos con evidencia real:
 
 - `python3 backend/manage.py check` -> OK.
-- `python3 backend/manage.py test` -> 5 tests pasados.
+- `python3 backend/manage.py test` -> 8 tests pasados.
 - `cd frontend && npm run build` -> build correcto con warnings existentes no bloqueantes.
 - `docker compose ps --format 'table {{.Service}}\t{{.Status}}'` -> servicios activos.
 - `curl -fsS http://localhost/images/logo/academix-logo.svg | grep -E '465FFF|Academix'` -> asset público con texto y color correctos.
-- CRUD `/api/universities/`, `/api/academic-units/` y `/api/campuses/` validados de extremo a extremo (create 201, patch 200, list 200, delete 204) con sesión + CSRF.
-- Protección verificada: `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204. `DELETE /api/academic-units/{id}/` con sedes asociadas -> 400; sin sedes -> 204.
+- CRUD `/api/universities/`, `/api/academic-units/`, `/api/campuses/` y `/api/careers/` validados de extremo a extremo (create 201, patch 200, list 200, delete 204) con sesión + CSRF.
+- Protección verificada: `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204. `DELETE /api/academic-units/{id}/` con sedes o carreras asociadas -> 400; sin dependencias -> 204.
 
 ### Estado funcional actual
 
@@ -157,9 +158,13 @@ Se han verificado los siguientes puntos con evidencia real:
   - `UniversityViewSet.destroy` bloqueado (400) si la universidad tiene unidades académicas asociadas.
 - CRUD de unidades académicas funcional en `frontend/src/pages/Institucional/UnidadAcademica.tsx` con selector de universidad (combobox con búsqueda), código, nombre corto, nombre completo, toggle de estado y protección de eliminación.
   - Backend: `AcademicUnitSerializer` expone `university` (editable), `university_name` (lectura) y `campus_count`.
-  - `AcademicUnitViewSet.destroy` bloqueado (400) si tiene sedes asociadas.
+  - `AcademicUnitViewSet.destroy` bloqueado (400) si tiene sedes o carreras asociadas.
 - CRUD de sedes funcional en `frontend/src/pages/Institucional/Sede.tsx` con combobox de unidad académica (búsqueda), código, nombre, toggle de estado y búsqueda/filtro en el listado.
   - Backend: modelo `Campus` (FK a `AcademicUnit`), `CampusViewSet` en `/api/campuses/`, serializer con `academic_unit` (editable) y `academic_unit_name` (lectura).
+- CRUD de carreras funcional en `frontend/src/pages/Academica/Carreras.tsx` (módulo Académica del sidebar).
+  - La **facultad** es la `AcademicUnit`: cada carrera pertenece a una unidad académica.
+  - Backend: modelo `Career` (FK `academic_unit` = facultad, M2M `campuses` = sedes donde se dicta, `code`, `short_name`, `name`, `is_active`), migración `0004_career`, `CareerViewSet` en `/api/careers/` (prefetch campuses, `select_related` académica, annotate `campus_count`), serializer expone `academic_unit` (editable), `academic_unit_name` (lectura), `campuses` (editable), `campus_count` (lectura).
+  - Frontend: combobox de facultad (unidad académica), checkboxes de sedes de la facultad seleccionada (multiselección), código, nombre corto, nombre, toggle "Carrera activa", búsqueda y filtro de estado. Carreras que son placeholder: `Planes.tsx`.
 - Dashboard (`AcademicsHome.tsx`) muestra "Resumen general" con métricas y listado de solo lectura de unidades (el CRUD vive en la página Institucional/UnidadAcademica).
 - Existe un superusuario local `admin` (creado en estas tareas; sin commitear credenciales reales).
 
@@ -170,7 +175,7 @@ Se han verificado los siguientes puntos con evidencia real:
    - Probar el flujo completo en el navegador (botón "Sign in with Google" -> volver al dashboard).
 
 2. Expandir el dominio académico
-   - Añadir más modelos y endpoints según el backlog: estudiantes, docentes, cursos, matrículas, periodos, notificaciones.
+   - Añadir más modelos y endpoints según el backlog: planes de estudio (el CRUD de carreras ya marca la base), estudiantes, docentes, cursos, matrículas, periodos, notificaciones.
 
 3. Reforzar la capa de seguridad
    - Revisar permisos, validación de CSRF, headers y manejo de sesiones en producción.
@@ -200,4 +205,4 @@ docker compose restart nginx
 
 ### Resumen ejecutivo
 
-La base del proyecto está preparada, dockerizada y validada con branding de Academix corregido. Ya están funcionales: autenticación local, Google OAuth (credenciales reales en `.env`, `LOGIN_REDIRECT_URL="/"`, callback `/auth/complete/google-oauth2/`), protección de rutas, zoom y tema persistidos, CRUD de universidades, CRUD de unidades académicas y CRUD de sedes, todos conectados a la API bajo `/api/` con búsqueda y filtro por estado. El dashboard es un resumen de solo lectura. Queda pendiente: verificar las URIs de redirección de Google Cloud Console y la expansión del dominio académico. El siguiente agente debe centrarse en la expansión del dominio, manteniendo la seguridad y la estructura ya validada.
+La base del proyecto está preparada, dockerizada y validada con branding de Academix corregido. Ya están funcionales: autenticación local, Google OAuth (credenciales reales en `.env`, `LOGIN_REDIRECT_URL="/"`, callback `/auth/complete/google-oauth2/`), protección de rutas, zoom y tema persistidos, CRUD de universidades, CRUD de unidades académicas, CRUD de sedes y CRUD de carreras (módulo Académica, con la unidad académica como facultad y multiselección de sedes), todos conectados a la API bajo `/api/` con búsqueda y filtro por estado. El dashboard es un resumen de solo lectura. Queda pendiente: verificar las URIs de redirección de Google Cloud Console y la expansión del dominio académico. El siguiente agente debe centrarse en la expansión del dominio, manteniendo la seguridad y la estructura ya validada.

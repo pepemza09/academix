@@ -6,6 +6,7 @@ import {
   BoxCubeIcon,
   CalenderIcon,
   ChevronDownIcon,
+  DocsIcon,
   FolderIcon,
   GridIcon,
   HorizontaLDots,
@@ -38,6 +39,14 @@ const navItems: NavItem[] = [
       { name: "Universidad", path: "/universidad", pro: false },
       { name: "Unidades Académicas", path: "/unidad-academica", pro: false },
       { name: "Sede", path: "/sede", pro: false },
+    ],
+  },
+  {
+    icon: <DocsIcon />,
+    name: "Académica",
+    subItems: [
+      { name: "Carreras", path: "/academica/carreras", pro: false },
+      { name: "Planes", path: "/academica/planes", pro: false },
     ],
   },
   {
