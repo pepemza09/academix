@@ -152,7 +152,7 @@ export default function Carreras() {
       return;
     }
     if (!form.academic_unit) {
-      setFormError("Debes seleccionar una facultad (unidad académica).");
+      setFormError("Debes seleccionar una unidad académica.");
       return;
     }
     if (!form.code.trim() || !form.name.trim() || !form.short_name.trim()) {
@@ -225,7 +225,7 @@ export default function Carreras() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nombre, código, nombre corto o facultad…"
+                placeholder="Buscar por nombre, código, nombre corto o unidad académica…"
                 className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 pr-10 text-sm shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
               <svg
@@ -280,7 +280,7 @@ export default function Carreras() {
                   <tr>
                     <th className="px-5 py-3">Código</th>
                     <th className="px-5 py-3">Nombre</th>
-                    <th className="px-5 py-3">Facultad</th>
+                    <th className="px-5 py-3">Unidad académica</th>
                     <th className="px-5 py-3">Sedes</th>
                     <th className="px-5 py-3">Estado</th>
                     <th className="px-5 py-3 text-right">Acciones</th>
@@ -394,11 +394,11 @@ export default function Carreras() {
               />
             </div>
             <div>
-              <Label htmlFor="career-unit">Facultad (unidad académica)</Label>
+              <Label htmlFor="career-unit">Unidad académica</Label>
               <Combobox
                 placeholder={
                   form.university
-                    ? "Busca o selecciona una facultad"
+                    ? "Busca o selecciona una unidad académica"
                     : "Primero elige la universidad"
                 }
                 value={form.academic_unit}
@@ -444,7 +444,7 @@ export default function Carreras() {
               <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
                 {unitCampuses.length === 0 ? (
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    No hay sedes para la facultad seleccionada.
+                    No hay sedes para la unidad académica seleccionada.
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
