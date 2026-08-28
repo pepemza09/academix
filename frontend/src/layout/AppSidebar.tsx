@@ -36,7 +36,7 @@ const navItems: NavItem[] = [
     name: "Institucional",
     subItems: [
       { name: "Universidad", path: "/universidad", pro: false },
-      { name: "Unidad Académica", path: "/unidad-academica", pro: false },
+      { name: "Unidades Académicas", path: "/unidad-academica", pro: false },
       { name: "Sede", path: "/sede", pro: false },
     ],
   },

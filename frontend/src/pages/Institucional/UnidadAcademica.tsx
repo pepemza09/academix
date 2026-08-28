@@ -162,7 +162,7 @@ export default function UnidadAcademica() {
         title="Academix | Unidad Académica"
         description="Gestión de unidades académicas"
       />
-      <PageBreadcrumb pageTitle="Unidad Académica" />
+      <PageBreadcrumb pageTitle="Unidades Académicas" />
 
       <div className="space-y-6">
         <div className="flex justify-end">

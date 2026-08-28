@@ -1,14 +1,16 @@
 import { HelmetProvider, Helmet } from "react-helmet-async";
 
+const APP_NAME = "Academix";
+
 const PageMeta = ({
-  title,
+  title: _title,
   description,
 }: {
-  title: string;
+  title?: string;
   description: string;
 }) => (
   <Helmet>
-    <title>{title}</title>
+    <title>{APP_NAME}</title>
     <meta name="description" content={description} />
   </Helmet>
 );
