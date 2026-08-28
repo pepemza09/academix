@@ -34,6 +34,22 @@ export default function Universidad() {
   const [deleteTarget, setDeleteTarget] = useState<University | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const filteredUniversities = universities.filter((university) => {
+    const term = search.trim().toLowerCase();
+    const matchesSearch =
+      !term ||
+      university.name.toLowerCase().includes(term) ||
+      university.short_name.toLowerCase().includes(term);
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" && university.is_active) ||
+      (statusFilter === "inactive" && !university.is_active);
+    return matchesSearch && matchesStatus;
+  });
+
   const fetchUniversities = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -139,14 +155,61 @@ export default function Universidad() {
               Listado de universidades
             </h2>
           </div>
+
+          <div className="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-800 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nombre o abreviatura…"
+                className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 pr-10 text-sm shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+              />
+              <svg
+                className="absolute right-4 top-1/2 size-5 -translate-y-1/2 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"
+                />
+              </svg>
+            </div>
+            <div className="w-full sm:w-52">
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(
+                    e.target.value as "all" | "active" | "inactive",
+                  )
+                }
+                className="h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+              >
+                <option value="all" className="bg-white text-gray-800 dark:bg-gray-900 dark:text-white/90">
+                  Todos
+                </option>
+                <option value="active" className="bg-white text-gray-800 dark:bg-gray-900 dark:text-white/90">
+                  Solo activos
+                </option>
+                <option value="inactive" className="bg-white text-gray-800 dark:bg-gray-900 dark:text-white/90">
+                  Solo inactivos
+                </option>
+              </select>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             {loading ? (
               <div className="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                 Cargando universidades…
               </div>
-            ) : universities.length === 0 ? (
+            ) : filteredUniversities.length === 0 ? (
               <div className="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
-                Aún no hay universidades registradas.
+                No se encontraron universidades con los criterios de búsqueda.
               </div>
             ) : (
               <table className="w-full min-w-[640px] text-left text-sm">
@@ -159,7 +222,7 @@ export default function Universidad() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {universities.map((university) => (
+                  {filteredUniversities.map((university) => (
                     <tr
                       key={university.id}
                       className="hover:bg-gray-50 dark:hover:bg-white/[0.02]"
