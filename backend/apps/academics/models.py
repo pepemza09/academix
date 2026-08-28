@@ -31,3 +31,27 @@ class AcademicUnit(models.Model):
 
     def __str__(self) -> str:
         return f"{self.code} - {self.name}"
+
+
+class Campus(models.Model):
+    academic_unit = models.ForeignKey(
+        AcademicUnit, on_delete=models.CASCADE, related_name="campuses"
+    )
+    code = models.CharField(max_length=30)
+    name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["academic_unit", "code"],
+                name="unique_campus_code_per_academic_unit",
+            )
+        ]
+        indexes = [models.Index(fields=["academic_unit", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"{self.code} - {self.name}"

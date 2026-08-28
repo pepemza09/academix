@@ -1,5 +1,5 @@
 from django.test import TestCase
-from .models import AcademicUnit, University
+from .models import AcademicUnit, Campus, University
 
 
 class UniversityModelTests(TestCase):
@@ -32,3 +32,38 @@ class UniversityProtectionTests(TestCase):
             university=university,
         )
         self.assertTrue(university.academic_units.exists())
+
+
+class CampusModelTests(TestCase):
+    def test_campus_belongs_to_academic_unit(self):
+        university = University.objects.create(name="Universidad")
+        unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Ingeniería",
+            name="Facultad de Ingeniería",
+            university=university,
+        )
+        campus = Campus.objects.create(
+            code="SED-01",
+            name="Sede Centro",
+            academic_unit=unit,
+        )
+        self.assertEqual(str(campus), "SED-01 - Sede Centro")
+        self.assertEqual(campus.academic_unit, unit)
+
+
+class AcademicUnitProtectionTests(TestCase):
+    def test_university_has_campuses(self):
+        university = University.objects.create(name="Universidad")
+        unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Ingeniería",
+            name="Facultad de Ingeniería",
+            university=university,
+        )
+        Campus.objects.create(
+            code="SED-01",
+            name="Sede Centro",
+            academic_unit=unit,
+        )
+        self.assertTrue(unit.campuses.exists())

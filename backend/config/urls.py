@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
-from apps.academics.models import AcademicUnit, University
+from apps.academics.models import AcademicUnit, Campus, University
 
 
 class UniversitySerializer(serializers.ModelSerializer):
@@ -44,6 +44,7 @@ class AcademicUnitSerializer(serializers.ModelSerializer):
     university_name = serializers.CharField(
         source="university.name", read_only=True
     )
+    campus_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = AcademicUnit
@@ -54,19 +55,57 @@ class AcademicUnitSerializer(serializers.ModelSerializer):
             "name",
             "university",
             "university_name",
+            "campus_count",
             "is_active",
         ]
 
 
 class AcademicUnitViewSet(viewsets.ModelViewSet):
-    queryset = AcademicUnit.objects.select_related("university").all()
+    queryset = AcademicUnit.objects.select_related("university").annotate(
+        campus_count=Count("campuses")
+    )
     serializer_class = AcademicUnitSerializer
+    permission_classes = [IsAuthenticated]
+
+    def destroy(self, request, *args, **kwargs):
+        academic_unit = self.get_object()
+        if academic_unit.campuses.exists():
+            return Response(
+                {
+                    "detail": "No se puede eliminar una unidad académica que tiene sedes asociadas."
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class CampusSerializer(serializers.ModelSerializer):
+    academic_unit_name = serializers.CharField(
+        source="academic_unit.name", read_only=True
+    )
+
+    class Meta:
+        model = Campus
+        fields = [
+            "id",
+            "code",
+            "name",
+            "academic_unit",
+            "academic_unit_name",
+            "is_active",
+        ]
+
+
+class CampusViewSet(viewsets.ModelViewSet):
+    queryset = Campus.objects.select_related("academic_unit").all()
+    serializer_class = CampusSerializer
     permission_classes = [IsAuthenticated]
 
 
 router = DefaultRouter()
 router.register("universities", UniversityViewSet, basename="university")
 router.register("academic-units", AcademicUnitViewSet, basename="academic-unit")
+router.register("campuses", CampusViewSet, basename="campus")
 
 
 @require_http_methods(["GET"])

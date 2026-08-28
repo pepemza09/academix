@@ -111,20 +111,21 @@ Este archivo sirve como contexto de continuidad para el siguiente agente IA. Deb
 
 - `docker-compose.yml`: orquestación principal del entorno local.
 - `backend/config/settings.py`: configuración global de Django, seguridad y entorno.
-- `backend/config/urls.py`: endpoints API, health, auth y viewsets (University, AcademicUnit).
-- `backend/apps/academics/models.py`: dominio de `University` y `AcademicUnit`.
-- `backend/apps/academics/migrations/0001_initial.py` y `0002_*`: migraciones aplicadas.
+- `backend/config/urls.py`: endpoints API, health, auth y viewsets (University, AcademicUnit, Campus).
+- `backend/apps/academics/models.py`: dominio de `University`, `AcademicUnit` y `Campus`.
+- `backend/apps/academics/migrations/0001_initial.py`, `0002_*` y `0003_campus`: migraciones aplicadas.
 - `backend/apps/academics/tests.py`: validación funcional de los modelos.
 - `frontend/src/api/client.ts`: cliente fetch con cookies, CSRF y manejo de errores.
-- `frontend/src/api/auth.ts`, `frontend/src/api/universities.ts`, `frontend/src/api/academicUnits.ts`: servicios API.
+- `frontend/src/api/auth.ts`, `universities.ts`, `academicUnits.ts`, `campuses.ts`: servicios API.
+- `frontend/src/components/form/Combobox.tsx`: componente reutilizable de selección con búsqueda (input + lista desplegable filtrable).
 - `frontend/src/context/AuthContext.tsx`: estado de sesión, login, logout y Google.
 - `frontend/src/context/ThemeContext.tsx`: tema dark/light y zoom persistido.
 - `frontend/src/components/common/ProtectedRoute.tsx`: protección de rutas autenticadas.
 - `frontend/src/components/ui/modal/index.tsx`: Modal con props `centered`/`isFullscreen`.
 - `frontend/src/pages/Dashboard/AcademicsHome.tsx`: resumen general con métricas y listado de solo lectura de unidades académicas.
 - `frontend/src/pages/Institucional/Universidad.tsx`: CRUD de universidades.
-- `frontend/src/pages/Institucional/UnidadAcademica.tsx`: CRUD de unidades académicas con selector de universidad.
-- `frontend/src/pages/Institucional/Sede.tsx`: página base (pendiente de CRUD).
+- `frontend/src/pages/Institucional/UnidadAcademica.tsx`: CRUD de unidades académicas con combobox de universidad.
+- `frontend/src/pages/Institucional/Sede.tsx`: CRUD de sedes con combobox de unidad académica.
 - `frontend/src/layout/AppSidebar.tsx`: navegación principal (Dashboard + Institucional).
 - `frontend/index.html`: favicon y título de la pestaña.
 - `frontend/public/images/logo/*.svg`: assets del logo actualizados.
@@ -135,12 +136,12 @@ Este archivo sirve como contexto de continuidad para el siguiente agente IA. Deb
 Se han verificado los siguientes puntos con evidencia real:
 
 - `python3 backend/manage.py check` -> OK.
-- `python3 backend/manage.py test` -> 3 tests pasados.
+- `python3 backend/manage.py test` -> 5 tests pasados.
 - `cd frontend && npm run build` -> build correcto con warnings existentes no bloqueantes.
 - `docker compose ps --format 'table {{.Service}}\t{{.Status}}'` -> servicios activos.
 - `curl -fsS http://localhost/images/logo/academix-logo.svg | grep -E '465FFF|Academix'` -> asset público con texto y color correctos.
-- CRUD `/api/universities/` y `/api/academic-units/` validados de extremo a extremo (create 201, patch 200, list 200, delete 204) con sesión + CSRF.
-- Protección verificada: `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204.
+- CRUD `/api/universities/`, `/api/academic-units/` y `/api/campuses/` validados de extremo a extremo (create 201, patch 200, list 200, delete 204) con sesión + CSRF.
+- Protección verificada: `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204. `DELETE /api/academic-units/{id}/` con sedes asociadas -> 400; sin sedes -> 204.
 
 ### Estado funcional actual
 
@@ -153,9 +154,12 @@ Se han verificado los siguientes puntos con evidencia real:
   - `LOGIN_REDIRECT_URL = "/"` -> tras autenticar vuelve al dashboard SPA y el frontend recupera la sesión vía `me()`.
   - Callback: `http://localhost/auth/complete/google-oauth2/` (debe registrarse como Authorized redirect URI en Google Cloud Console).
 - CRUD de universidades funcional (frontend + backend) con `short_name` e `is_active`.
-- CRUD de unidades académicas funcional en `frontend/src/pages/Institucional/UnidadAcademica.tsx` con selector de universidad, código, nombre corto, nombre completo, toggle de estado y protección de eliminación.
-  - Backend: `AcademicUnitSerializer` expone `university` (editable) y `university_name` (lectura).
-  - `UniversityViewSet.destroy` bloqueado (400) si la universidad tiene unidades asociadas.
+  - `UniversityViewSet.destroy` bloqueado (400) si la universidad tiene unidades académicas asociadas.
+- CRUD de unidades académicas funcional en `frontend/src/pages/Institucional/UnidadAcademica.tsx` con selector de universidad (combobox con búsqueda), código, nombre corto, nombre completo, toggle de estado y protección de eliminación.
+  - Backend: `AcademicUnitSerializer` expone `university` (editable), `university_name` (lectura) y `campus_count`.
+  - `AcademicUnitViewSet.destroy` bloqueado (400) si tiene sedes asociadas.
+- CRUD de sedes funcional en `frontend/src/pages/Institucional/Sede.tsx` con combobox de unidad académica (búsqueda), código, nombre, toggle de estado y búsqueda/filtro en el listado.
+  - Backend: modelo `Campus` (FK a `AcademicUnit`), `CampusViewSet` en `/api/campuses/`, serializer con `academic_unit` (editable) y `academic_unit_name` (lectura).
 - Dashboard (`AcademicsHome.tsx`) muestra "Resumen general" con métricas y listado de solo lectura de unidades (el CRUD vive en la página Institucional/UnidadAcademica).
 - Existe un superusuario local `admin` (creado en estas tareas; sin commitear credenciales reales).
 
@@ -165,13 +169,10 @@ Se han verificado los siguientes puntos con evidencia real:
    - Confirmar que `http://localhost/auth/complete/google-oauth2/` esté en Authorized redirect URIs de la OAuth Client.
    - Probar el flujo completo en el navegador (botón "Sign in with Google" -> volver al dashboard).
 
-2. Conectar Sede
-   - `Sede.tsx` es placeholder; falta CRUD real reutilizando el patrón de `Universidad.tsx` y `UnidadAcademica.tsx`.
-
-3. Expandir el dominio académico
+2. Expandir el dominio académico
    - Añadir más modelos y endpoints según el backlog: estudiantes, docentes, cursos, matrículas, periodos, notificaciones.
 
-4. Reforzar la capa de seguridad
+3. Reforzar la capa de seguridad
    - Revisar permisos, validación de CSRF, headers y manejo de sesiones en producción.
 
 ### Reglas de continuación
@@ -199,4 +200,4 @@ docker compose restart nginx
 
 ### Resumen ejecutivo
 
-La base del proyecto está preparada, dockerizada y validada con branding de Academix corregido. Ya están funcionales: autenticación local, Google OAuth (credenciales reales en `.env`, `LOGIN_REDIRECT_URL="/"`, callback `/auth/complete/google-oauth2/`), protección de rutas, zoom y tema persistidos, CRUD de universidades y CRUD de unidades académicas (con selector de universidad, código, nombre y toggle de estado) conectados a la API bajo `/api/`. El dashboard es un resumen de solo lectura. Queda pendiente: verificar las URIs de redirección de Google Cloud Console, el CRUD de Sede, y la expansión del dominio académico. El siguiente agente debe centrarse en el CRUD de Sede y la expansión del dominio, manteniendo la seguridad y la estructura ya validada.
+La base del proyecto está preparada, dockerizada y validada con branding de Academix corregido. Ya están funcionales: autenticación local, Google OAuth (credenciales reales en `.env`, `LOGIN_REDIRECT_URL="/"`, callback `/auth/complete/google-oauth2/`), protección de rutas, zoom y tema persistidos, CRUD de universidades, CRUD de unidades académicas y CRUD de sedes, todos conectados a la API bajo `/api/` con búsqueda y filtro por estado. El dashboard es un resumen de solo lectura. Queda pendiente: verificar las URIs de redirección de Google Cloud Console y la expansión del dominio académico. El siguiente agente debe centrarse en la expansión del dominio, manteniendo la seguridad y la estructura ya validada.
