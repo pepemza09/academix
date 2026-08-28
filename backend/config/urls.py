@@ -2,42 +2,66 @@ from django.contrib import admin
 from django.urls import include, path
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, login, logout
+from django.db.models import Count
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
 from apps.academics.models import AcademicUnit, University
 
 
 class UniversitySerializer(serializers.ModelSerializer):
+    academic_unit_count = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = University
-        fields = ["id", "name", "short_name", "is_active"]
+        fields = ["id", "name", "short_name", "is_active", "academic_unit_count"]
 
 
 class UniversityViewSet(viewsets.ModelViewSet):
-    queryset = University.objects.all()
+    queryset = University.objects.annotate(
+        academic_unit_count=Count("academic_units")
+    )
     serializer_class = UniversitySerializer
     permission_classes = [IsAuthenticated]
 
+    def destroy(self, request, *args, **kwargs):
+        university = self.get_object()
+        if university.academic_units.exists():
+            return Response(
+                {
+                    "detail": "No se puede eliminar una universidad que tiene unidades académicas asociadas."
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
 
 class AcademicUnitSerializer(serializers.ModelSerializer):
+    university_name = serializers.CharField(
+        source="university.name", read_only=True
+    )
+
     class Meta:
         model = AcademicUnit
-        fields = ["id", "code", "short_name", "name", "university", "is_active"]
-        read_only_fields = ["university"]
+        fields = [
+            "id",
+            "code",
+            "short_name",
+            "name",
+            "university",
+            "university_name",
+            "is_active",
+        ]
 
 
 class AcademicUnitViewSet(viewsets.ModelViewSet):
     queryset = AcademicUnit.objects.select_related("university").all()
     serializer_class = AcademicUnitSerializer
     permission_classes = [IsAuthenticated]
-
-    def perform_create(self, serializer):
-        university, _ = University.objects.get_or_create(name="Universidad")
-        serializer.save(university=university)
 
 
 router = DefaultRouter()

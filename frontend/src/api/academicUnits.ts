@@ -6,12 +6,13 @@ export interface AcademicUnit {
   short_name: string;
   name: string;
   university: number;
+  university_name: string;
   is_active: boolean;
 }
 
-export type AcademicUnitPayload = Omit<
+export type AcademicUnitPayload = Pick<
   AcademicUnit,
-  "id" | "university"
+  "code" | "short_name" | "name" | "university" | "is_active"
 >;
 
 export const academicUnitApi = {

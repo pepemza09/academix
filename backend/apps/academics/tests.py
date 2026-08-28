@@ -19,3 +19,16 @@ class AcademicUnitModelTests(TestCase):
         university = University.objects.create(name="Universidad")
         unit = AcademicUnit.objects.create(code="FAC-01", short_name="Ingeniería", name="Facultad de Ingeniería", university=university)
         self.assertEqual(str(unit), "FAC-01 - Facultad de Ingeniería")
+        self.assertEqual(unit.university, university)
+
+
+class UniversityProtectionTests(TestCase):
+    def test_cannot_delete_university_with_units(self):
+        university = University.objects.create(name="Universidad")
+        AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Ingeniería",
+            name="Facultad de Ingeniería",
+            university=university,
+        )
+        self.assertTrue(university.academic_units.exists())
