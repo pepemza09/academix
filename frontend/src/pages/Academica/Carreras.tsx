@@ -12,26 +12,31 @@ import { PencilIcon, TrashBinIcon } from "../../icons";
 import { Career, CareerPayload, careerApi } from "../../api/careers";
 import { AcademicUnit, academicUnitApi } from "../../api/academicUnits";
 import { Campus, campusApi } from "../../api/campuses";
+import { University, universityApi } from "../../api/universities";
 
-const EMPTY_FORM: CareerPayload = {
+type CareerForm = CareerPayload & { university: number };
+
+const EMPTY_FORM: CareerForm = {
   code: "",
   short_name: "",
   name: "",
   academic_unit: 0,
   campuses: [],
   is_active: true,
+  university: 0,
 };
 
 export default function Carreras() {
   const [careers, setCareers] = useState<Career[]>([]);
   const [academicUnits, setAcademicUnits] = useState<AcademicUnit[]>([]);
   const [campuses, setCampuses] = useState<Campus[]>([]);
+  const [universities, setUniversities] = useState<University[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Career | null>(null);
-  const [form, setForm] = useState<CareerPayload>(EMPTY_FORM);
+  const [form, setForm] = useState<CareerForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -45,14 +50,16 @@ export default function Carreras() {
     setLoading(true);
     setError(null);
     try {
-      const [careersData, unitsData, campusesData] = await Promise.all([
+      const [careersData, unitsData, campusesData, universitiesData] = await Promise.all([
         careerApi.list(),
         academicUnitApi.list(),
         campusApi.list(),
+        universityApi.list(),
       ]);
       setCareers(careersData);
       setAcademicUnits(unitsData);
       setCampuses(campusesData);
+      setUniversities(universitiesData);
     } catch (e) {
       setError(
         e instanceof Error
@@ -68,7 +75,16 @@ export default function Carreras() {
     fetchData();
   }, [fetchData]);
 
-  const academicUnitOptions = academicUnits.map((u) => ({
+  const universityOptions = universities.map((u) => ({
+    value: u.id,
+    label: u.short_name ? `${u.name} (${u.short_name})` : u.name,
+  }));
+
+  const availableUnits = form.university
+    ? academicUnits.filter((u) => u.university === form.university)
+    : [];
+
+  const academicUnitOptions = availableUnits.map((u) => ({
     value: u.id,
     label: u.short_name
       ? `${u.name} (${u.short_name})`
@@ -102,6 +118,7 @@ export default function Carreras() {
   };
 
   const openEdit = (career: Career) => {
+    const unit = academicUnits.find((u) => u.id === career.academic_unit);
     setEditing(career);
     setForm({
       code: career.code,
@@ -110,6 +127,7 @@ export default function Carreras() {
       academic_unit: career.academic_unit,
       campuses: [...career.campuses],
       is_active: career.is_active,
+      university: unit ? unit.university : 0,
     });
     setFormError(null);
     setModalOpen(true);
@@ -129,6 +147,10 @@ export default function Carreras() {
 
   const handleSubmit = async () => {
     setFormError(null);
+    if (!form.university) {
+      setFormError("Debes seleccionar una universidad.");
+      return;
+    }
     if (!form.academic_unit) {
       setFormError("Debes seleccionar una facultad (unidad académica).");
       return;
@@ -284,8 +306,22 @@ export default function Carreras() {
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
                         {career.academic_unit_name}
                       </td>
-                      <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
-                        {career.campus_count}
+                      <td className="px-5 py-4">
+                        {career.campus_details.length === 0 ? (
+                          <span className="text-gray-400">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {career.campus_details.map((c) => (
+                              <span
+                                key={c.id}
+                                title={c.name}
+                                className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-white/5 dark:text-gray-300"
+                              >
+                                {c.code}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="px-5 py-4">
                         {career.is_active ? (
@@ -342,9 +378,29 @@ export default function Carreras() {
 
           <div className="space-y-4">
             <div>
+              <Label htmlFor="career-university">Universidad</Label>
+              <Combobox
+                placeholder="Busca o selecciona una universidad"
+                value={form.university}
+                options={universityOptions}
+                onChange={(value) =>
+                  setForm({
+                    ...form,
+                    university: value,
+                    academic_unit: 0,
+                    campuses: [],
+                  })
+                }
+              />
+            </div>
+            <div>
               <Label htmlFor="career-unit">Facultad (unidad académica)</Label>
               <Combobox
-                placeholder="Busca o selecciona una facultad"
+                placeholder={
+                  form.university
+                    ? "Busca o selecciona una facultad"
+                    : "Primero elige la universidad"
+                }
                 value={form.academic_unit}
                 options={academicUnitOptions}
                 onChange={(value) =>

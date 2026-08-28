@@ -114,6 +114,13 @@ class CareerSerializer(serializers.ModelSerializer):
         source="academic_unit.name", read_only=True
     )
     campus_count = serializers.IntegerField(read_only=True)
+    campus_details = serializers.SerializerMethodField()
+
+    def get_campus_details(self, obj):
+        return [
+            {"id": campus.id, "code": campus.code, "name": campus.name}
+            for campus in obj.campuses.all()
+        ]
 
     class Meta:
         model = Career
@@ -126,6 +133,7 @@ class CareerSerializer(serializers.ModelSerializer):
             "academic_unit_name",
             "campuses",
             "campus_count",
+            "campus_details",
             "is_active",
         ]
 
