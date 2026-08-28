@@ -4,7 +4,7 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import Button from "../../components/ui/button/Button";
 import { Modal } from "../../components/ui/modal";
 import Input from "../../components/form/input/InputField";
-import Select from "../../components/form/Select";
+import Combobox from "../../components/form/Combobox";
 import Label from "../../components/form/Label";
 import Badge from "../../components/ui/badge/Badge";
 import Switch from "../../components/form/switch/Switch";
@@ -85,7 +85,7 @@ export default function UnidadAcademica() {
   }, [fetchData]);
 
   const universityOptions = universities.map((u) => ({
-    value: String(u.id),
+    value: u.id,
     label: u.short_name
       ? `${u.name} (${u.short_name})`
       : u.name,
@@ -327,12 +327,12 @@ export default function UnidadAcademica() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="unit-university">Universidad</Label>
-              <Select
-                placeholder="Selecciona una universidad"
-                defaultValue={form.university ? String(form.university) : ""}
+              <Combobox
+                placeholder="Busca o selecciona una universidad"
+                value={form.university}
                 options={universityOptions}
                 onChange={(value) =>
-                  setForm({ ...form, university: Number(value) })
+                  setForm({ ...form, university: value })
                 }
               />
             </div>
