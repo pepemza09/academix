@@ -25,6 +25,7 @@ import UnidadAcademica from "./pages/Institucional/UnidadAcademica";
 import Sede from "./pages/Institucional/Sede";
 import Carreras from "./pages/Academica/Carreras";
 import Planes from "./pages/Academica/Planes";
+import Areas from "./pages/Academica/Areas";
 
 export default function App() {
   return (
@@ -50,6 +51,7 @@ export default function App() {
             {/* Académica */}
             <Route path="/academica/carreras" element={<Carreras />} />
             <Route path="/academica/planes" element={<Planes />} />
+            <Route path="/academica/areas" element={<Areas />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />

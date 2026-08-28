@@ -1,5 +1,5 @@
 from django.test import TestCase
-from .models import AcademicUnit, Campus, Career, StudyPlan, University
+from .models import AcademicUnit, Campus, Career, StudyArea, StudyPlan, University
 
 
 class UniversityModelTests(TestCase):
@@ -191,4 +191,72 @@ class StudyPlanProtectionTests(TestCase):
             title="Ingeniero en Informática",
             career=career,
         )
+        self.assertTrue(career.study_plans.exists())
+
+
+class StudyAreaModelTests(TestCase):
+    def setUp(self):
+        self.university = University.objects.create(name="Universidad")
+        self.unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Ingeniería",
+            name="Facultad de Ingeniería",
+            university=self.university,
+        )
+        self.career = Career.objects.create(
+            code="ING-01",
+            short_name="Ing. Informática",
+            name="Ingeniería en Informática",
+            academic_unit=self.unit,
+        )
+        self.plan = StudyPlan.objects.create(
+            code="PLAN-2010",
+            title="Ingeniero en Informática",
+            career=self.career,
+        )
+
+    def test_area_belongs_to_study_plan(self):
+        area = StudyArea.objects.create(
+            name="Ciencias Básicas",
+            study_plan=self.plan,
+            is_active=True,
+        )
+        self.assertEqual(str(area), "Ciencias Básicas")
+        self.assertEqual(area.study_plan, self.plan)
+        self.assertTrue(area.is_active)
+
+    def test_area_can_be_inactive(self):
+        area = StudyArea.objects.create(
+            name="Ciencias de la Computación",
+            study_plan=self.plan,
+            is_active=False,
+        )
+        self.assertFalse(area.is_active)
+
+
+class StudyAreaProtectionTests(TestCase):
+    def test_study_plan_with_areas_cannot_be_deleted(self):
+        university = University.objects.create(name="Universidad")
+        unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Ingeniería",
+            name="Facultad de Ingeniería",
+            university=university,
+        )
+        career = Career.objects.create(
+            code="ING-01",
+            short_name="Ing. Informática",
+            name="Ingeniería en Informática",
+            academic_unit=unit,
+        )
+        plan = StudyPlan.objects.create(
+            code="PLAN-2010",
+            title="Ingeniero en Informática",
+            career=career,
+        )
+        StudyArea.objects.create(
+            name="Ciencias Básicas",
+            study_plan=plan,
+        )
+        self.assertTrue(plan.areas.exists())
         self.assertTrue(career.study_plans.exists())

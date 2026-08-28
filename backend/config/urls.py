@@ -10,7 +10,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
-from apps.academics.models import AcademicUnit, Campus, Career, StudyPlan, University
+from apps.academics.models import (
+    AcademicUnit,
+    Campus,
+    Career,
+    StudyArea,
+    StudyPlan,
+    University,
+)
 
 
 class UniversitySerializer(serializers.ModelSerializer):
@@ -180,6 +187,51 @@ class StudyPlanViewSet(viewsets.ModelViewSet):
     serializer_class = StudyPlanSerializer
     permission_classes = [IsAuthenticated]
 
+    def destroy(self, request, *args, **kwargs):
+        study_plan = self.get_object()
+        if study_plan.areas.exists():
+            return Response(
+                {
+                    "detail": "No se puede eliminar un plan de estudios que tiene áreas asociadas."
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class StudyAreaSerializer(serializers.ModelSerializer):
+    study_plan_code = serializers.CharField(
+        source="study_plan.code", read_only=True
+    )
+    study_plan_title = serializers.CharField(
+        source="study_plan.title", read_only=True
+    )
+    career_name = serializers.CharField(
+        source="study_plan.career.name", read_only=True
+    )
+    career_code = serializers.CharField(
+        source="study_plan.career.code", read_only=True
+    )
+
+    class Meta:
+        model = StudyArea
+        fields = [
+            "id",
+            "name",
+            "study_plan",
+            "study_plan_code",
+            "study_plan_title",
+            "career_name",
+            "career_code",
+            "is_active",
+        ]
+
+
+class StudyAreaViewSet(viewsets.ModelViewSet):
+    queryset = StudyArea.objects.select_related("study_plan__career").all()
+    serializer_class = StudyAreaSerializer
+    permission_classes = [IsAuthenticated]
+
 
 router = DefaultRouter()
 router.register("universities", UniversityViewSet, basename="university")
@@ -187,6 +239,7 @@ router.register("academic-units", AcademicUnitViewSet, basename="academic-unit")
 router.register("campuses", CampusViewSet, basename="campus")
 router.register("careers", CareerViewSet, basename="career")
 router.register("study-plans", StudyPlanViewSet, basename="study-plan")
+router.register("study-areas", StudyAreaViewSet, basename="study-area")
 
 
 @require_http_methods(["GET"])

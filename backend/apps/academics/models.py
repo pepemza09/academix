@@ -108,3 +108,20 @@ class StudyPlan(models.Model):
 
     def __str__(self) -> str:
         return f"{self.code} - {self.title}"
+
+
+class StudyArea(models.Model):
+    study_plan = models.ForeignKey(
+        StudyPlan, on_delete=models.CASCADE, related_name="areas"
+    )
+    name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        indexes = [models.Index(fields=["study_plan", "is_active"])]
+
+    def __str__(self) -> str:
+        return self.name
