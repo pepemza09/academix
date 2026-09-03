@@ -201,7 +201,28 @@ export default function Carreras() {
 
       <div className="space-y-6">
         <div className="flex justify-end">
-          <Button onClick={openCreate} size="sm" className="font-bold">
+          <Button
+            onClick={openCreate}
+            size="sm"
+            className="font-bold"
+            startIcon={
+              <svg
+                className="h-4 w-4"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M8 3v10M3 8h10"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
+          >
             Nueva carrera
           </Button>
         </div>

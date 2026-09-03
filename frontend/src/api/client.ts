@@ -23,8 +23,9 @@ async function request<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
+  const isFormData = options.body instanceof FormData;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(options.headers as Record<string, string>),
   };
 
@@ -65,4 +66,10 @@ export const api = {
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  upload: <T>(path: string, formData: FormData) => {
+    const headers: Record<string, string> = {};
+    const csrf = getCookie("csrftoken");
+    if (csrf) headers["X-CSRFToken"] = csrf;
+    return request<T>(path, { method: "POST", body: formData, headers });
+  },
 };

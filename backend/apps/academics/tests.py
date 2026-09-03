@@ -170,6 +170,26 @@ class StudyPlanModelTests(TestCase):
         self.assertFalse(plan.is_active)
         self.assertFalse(plan.is_current)
 
+    def test_study_plan_can_have_intermediate_title(self):
+        plan = StudyPlan.objects.create(
+            code="PLAN-2010",
+            title="Ingeniero en Informática",
+            intermediate_title="Técnico Universitario en Programación",
+            career=self.career,
+        )
+        self.assertEqual(
+            plan.intermediate_title,
+            "Técnico Universitario en Programación",
+        )
+
+    def test_study_plan_intermediate_title_defaults_to_empty(self):
+        plan = StudyPlan.objects.create(
+            code="PLAN-2010",
+            title="Ingeniero en Informática",
+            career=self.career,
+        )
+        self.assertEqual(plan.intermediate_title, "")
+
 
 class StudyPlanProtectionTests(TestCase):
     def test_career_with_study_plans_cannot_be_deleted(self):

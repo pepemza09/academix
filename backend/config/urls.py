@@ -5,6 +5,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.db.models import Count
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
+from django.core.files.images import get_image_dimensions
 from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -18,6 +19,7 @@ from apps.academics.models import (
     StudyPlan,
     University,
 )
+from apps.users.models import Profile
 
 
 class UniversitySerializer(serializers.ModelSerializer):
@@ -174,6 +176,7 @@ class StudyPlanSerializer(serializers.ModelSerializer):
             "id",
             "code",
             "title",
+            "intermediate_title",
             "career",
             "career_name",
             "career_code",
@@ -247,6 +250,22 @@ def health(request):
     return JsonResponse({"status": "ok", "service": "academix-api"})
 
 
+def user_payload(user):
+    is_local = not user.social_auth.exists()
+    profile, _ = Profile.objects.get_or_create(user=user)
+    avatar = profile.avatar.url if profile.avatar else None
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_local": is_local,
+        "auth_provider": "local" if is_local else "google",
+        "avatar": avatar,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+    }
+
+
 @require_http_methods(["POST"])
 @ensure_csrf_cookie
 def login_view(request):
@@ -256,14 +275,84 @@ def login_view(request):
     if user is None:
         return JsonResponse({"detail": "Credenciales inválidas."}, status=401)
     login(request, user)
-    return JsonResponse({"id": user.id, "username": user.username, "email": user.email})
+    return JsonResponse(user_payload(user))
 
 
 @ensure_csrf_cookie
 def me(request):
     if not request.user.is_authenticated:
         return JsonResponse({"detail": "Autenticación requerida."}, status=401)
-    return JsonResponse({"id": request.user.id, "username": request.user.username, "email": request.user.email})
+    return JsonResponse(user_payload(request.user))
+
+
+@require_http_methods(["POST"])
+@ensure_csrf_cookie
+def upload_avatar_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Autenticación requerida."}, status=401)
+
+    avatar = request.FILES.get("avatar")
+    if avatar is None:
+        return JsonResponse({"detail": "Debes adjuntar una imagen."}, status=400)
+
+    if avatar.size > 5 * 1024 * 1024:
+        return JsonResponse(
+            {"detail": "La imagen no debe superar los 5 MB."}, status=400
+        )
+
+    try:
+        width, height = get_image_dimensions(avatar)
+    except Exception:
+        width = height = None
+
+    if not width or not height:
+        return JsonResponse(
+            {"detail": "El archivo debe ser una imagen válida."}, status=400
+        )
+
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    profile.avatar = avatar
+    profile.save(update_fields=["avatar", "updated_at"])
+
+    return JsonResponse(
+        {"status": "ok", "detail": "Foto de perfil actualizada.", "avatar": profile.avatar.url}
+    )
+
+
+@require_http_methods(["POST"])
+@ensure_csrf_cookie
+def change_password_view(request):
+    import json
+
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Autenticación requerida."}, status=401)
+
+    if request.user.social_auth.exists():
+        return JsonResponse(
+            {
+                "detail": "Los usuarios autenticados con Google no pueden cambiar su contraseña."
+            },
+            status=400,
+        )
+
+    payload = json.loads(request.body or "{}")
+    current_password = payload.get("current_password")
+    new_password = payload.get("new_password")
+
+    if not request.user.check_password(current_password or ""):
+        return JsonResponse(
+            {"detail": "La contraseña actual es incorrecta."}, status=400
+        )
+
+    if not new_password or len(new_password) < 8:
+        return JsonResponse(
+            {"detail": "La nueva contraseña debe tener al menos 8 caracteres."},
+            status=400,
+        )
+
+    request.user.set_password(new_password)
+    request.user.save(update_fields=["password"])
+    return JsonResponse({"status": "ok", "detail": "Contraseña actualizada."})
 
 
 @require_http_methods(["POST"])
@@ -279,6 +368,26 @@ urlpatterns = [
     path("api/", include(router.urls)),
     path("api/auth/login/", login_view),
     path("api/auth/me/", me),
+    path("api/auth/change-password/", change_password_view),
+    path("api/auth/upload-avatar/", upload_avatar_view),
     path("api/auth/logout/", logout_view),
     path("auth/", include("social_django.urls", namespace="social")),
 ]
+
+from django.conf import settings
+from django.conf.urls.static import static
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+else:
+    from django.urls import re_path
+    from django.views.static import serve as media_serve
+
+    urlpatterns += [
+        re_path(
+            r"^media/(?P<path>.*)$",
+            media_serve,
+            {"document_root": settings.MEDIA_ROOT},
+            name="media",
+        )
+    ]

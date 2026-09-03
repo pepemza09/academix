@@ -1,218 +1,97 @@
 # Academix AI Development Instructions
 
-Academix es una aplicación de gestión académica universitaria con un backend Django/DRF y un frontend React/Vite basado en TailAdmin. La arquitectura local se ejecuta con Docker Compose: Nginx, Gunicorn, Django, PostgreSQL y Redis.
+Academix es una aplicación de gestión académica universitaria. Para las decisiones de **stack técnico** (Docker, PostgreSQL, Redis, Nginx/Gunicorn, React/Vite/TailAdmin) y de **UX/UI**, consulta `agents_base.md`. Este archivo documenta únicamente la **lógica de negocio** del dominio académico.
+
+> La base técnica y de UI/UX es reutilizable: si quieres comenzar otro sistema con el mismo stack, centra tu trabajo en representar un dominio distinto siguiendo los patrones de negocio aquí documentados.
 
 ## Contexto que debe cargarse
 
-Antes de modificar código, el agente principal y cualquier subagente debe examinar:
-- `autoskills/packages/autoskills/skills-registry/django-expert/SKILL.md`
-- `autoskills/packages/autoskills/skills-registry/django-patterns/SKILL.md`
-- `autoskills/packages/autoskills/skills-registry/django-security/SKILL.md`
-- `autoskills/packages/autoskills/skills-registry/python-patterns/SKILL.md`
-- `autoskills/packages/autoskills/skills-registry/python-testing-patterns/SKILL.md`
-- `autoskills/packages/autoskills/skills-registry/redis-development/SKILL.md`
-- el template TailAdmin en `template/` y el frontend activo en `frontend/`.
+- `agents_base.md` (stack + UX/UI + comandos + convenciones) antes de cualquier cambio.
+- Los skills de `autoskills/packages/autoskills/skills-registry/*`: **bajarlas del repositorio** [`https://github.com/midudev/autoskills`](https://github.com/midudev/autoskills) (clon/pull, no están incluidas en el checkout por defecto) y **leerlas** antes de trabajar (ver listado en `agents_base.md`).
 
-## Seguridad de configuración
+## Dominio académico (lógica de negocio)
 
-Todas las claves, usuarios, tokens, contraseñas, OAuth credentials, URLs de conexión y demás valores sensibles deben centralizarse en `.env`. `.env` está ignorado por Git; solo `.env.example` se versiona con placeholders. Nunca imprimir, hardcodear o comitear secretos.
+El dominio es jerárquico y usa códigos únicos dentro de su nivel padre y estado activo/inactivo. En orden de dependencia:
 
-## Coordinación
+### University (Universidad)
+- Campos: `name`, `short_name` (abreviatura, ej. `UNCUYO`), `is_active`.
+- Tiene N `AcademicUnit`.
+- **No se puede eliminar** si tiene unidades académicas asociadas (400).
 
-- `academix-backend`: modelos, migraciones, API, permisos, autenticación y tests Django.
-- `academix-frontend`: UI/UX, rutas, componentes TailAdmin, integración API y accesibilidad.
-- El agente principal coordina contratos entre ambos: API bajo `/api/`, autenticación por sesión y Google OAuth bajo `/auth/`.
-- Antes de una edición, formular una hipótesis local y una comprobación barata.
-- Tras editar, ejecutar una validación enfocada; al finalizar ejecutar los tests o builds disponibles.
+### AcademicUnit (Unidad académica)
+- Pertenece a una `University`; código único dentro de la universidad, nombre corto, nombre completo, estado activo.
+- Tiene sedes (`Campus`) y carreras (`Career`).
+- **No se puede eliminar** si tiene sedes o carreras asociadas (400).
 
-## Comandos principales
+### Campus (Sede)
+- Pertenece a una `AcademicUnit`; campos: `code`, `name`, `is_active`.
 
-```bash
-cp .env.example .env
-python3 backend/manage.py check
-python3 backend/manage.py test
-cd frontend && npm ci && npm run build
-docker compose up --build
-```
+### Career (Carrera)
+- Pertenece a una `AcademicUnit` (**la facultad es la `AcademicUnit`**).
+- Multiselección de `Campus` (M2M): sedes donde se dicta.
+- Campos: `code`, `short_name`, `name`, `is_active`.
+- Tiene N `StudyPlan`.
+- **No se puede eliminar** si tiene planes de estudio asociados (400).
 
-## Dominio inicial
+### StudyPlan (Plan de estudio)
+- Pertenece a una `Career`; una carrera puede tener uno o más planes.
+- Campos: `code`, `title` (título que otorga), `intermediate_title` (título intermedio, opcional), `is_active` (activo/inactivo), `is_current` (vigente/no vigente).
+- Tiene N `StudyArea`.
+- **No se puede eliminar** si tiene áreas asociadas (400).
 
-Existe una `University` (con `name`, `short_name`/abreviatura e `is_active`) y N `AcademicUnit`. Cada unidad posee código único dentro de la universidad, nombre corto, nombre completo y estado activo.
+### StudyArea (Área)
+- Pertenece a un `StudyPlan`; campos: `name`, `is_active`.
 
-## Handoff de desarrollo: estado actual y contexto operativo
+## Endpoints API de negocio (bajo `/api/`)
 
-Este archivo sirve como contexto de continuidad para el siguiente agente IA. Debe leerse antes de comenzar un cambio funcional.
+| Recurso | Endpoint | Notas |
+|---------|----------|-------|
+| Universidad | `/api/universities/` | annotate `academic_unit_count` |
+| Unidad académica | `/api/academic-units/` | expone `university` (editable), `university_name`, `campus_count` |
+| Sede | `/api/campuses/` | expone `academic_unit` (editable), `academic_unit_name` |
+| Carrera | `/api/careers/` | `academic_unit` (editable), `academic_unit_name`, `campuses` (editable), `campus_count`, `campus_details` (lectura: `[{id, code, name}]`) |
+| Plan de estudio | `/api/study-plans/` | `career` (editable), `career_name`, `career_code`, `intermediate_title`, `is_active`, `is_current` |
+| Área | `/api/study-areas/` | `study_plan` (editable), `study_plan_code`, `study_plan_title`, `career_name`, `career_code`, `is_active` |
 
-### Estado verificado del proyecto
+Protección de eliminación verificada (regla de integridad referencial):
+- `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204.
+- `DELETE /api/academic-units/{id}/` con sedes o carreras asociadas -> 400; sin dependencias -> 204.
+- `DELETE /api/careers/{id}/` con planes asociados -> 400.
+- `DELETE /api/study-plans/{id}/` con áreas asociadas -> 400.
 
-- La aplicación está diseñada como una plataforma académica universitaria con backend Django/DRF y frontend React/Vite con TailAdmin.
-- La infraestructura local corre en Docker Compose con servicios principales: `backend`, `frontend`, `db`, `redis` y `nginx`.
-- El backend se ejecuta con Gunicorn, el frontend se sirve por Nginx y la base de datos es PostgreSQL 16.10 Alpine.
-- Las credenciales, URLs, OAuth, secretos y configuración sensible viven en `.env`; `.env.example` es la plantilla versionada.
-- El proyecto ya está funcionalmente levantado y verificado en su estado actual.
+## Archivos clave de negocio
 
-### Problemas resueltos y decisiones ya tomadas
-
-1. PostgreSQL / volumen incompatibles
-   - El proyecto había sido inicializado con PostgreSQL 17, pero el volumen local ya estaba creado con una versión anterior.
-   - Se corrigió el compose para usar `postgres:16.10-alpine` y se evitó destruir datos previos de forma agresiva.
-   - El resultado es que la base de datos ya arranca correctamente y los servicios siguen saludables.
-
-2. Nginx y headers del host
-   - El backend rechazaba solicitudes con `HTTP_HOST=academix_backend` o un host externo no consistente.
-   - Se ajustó la config del proxy inverso para conservar el host público y evitar errores de host/CSRF o errores de proxy.
-   - El backend responde correctamente a través de Nginx.
-
-3. Estado de servicios y arranque
-   - Hubo un problema inicial con 502 durante arranque porque Gunicorn no estaba listo aún.
-   - Se solucionó con reinicios y validación posterior del estado real del servicio.
-   - El stack queda en estado operativo y se recomienda validar con `docker compose ps` antes de tratar fallos de red.
-
-4. Frontend desactualizado / caché visual
-   - El contenedor del frontend entregaba una versión anterior del build.
-   - Se reconstruyó el frontend y se reinició Nginx.
-   - Si el navegador sigue mostrando contenido viejo, debe forzarse recarga con `Ctrl + F5`.
-
-5. Branding visual de Academix
-   - El nombre visible del producto estaba incorrecto en algunos assets y se mostraba `LINEX` en lugar de `Academix`.
-   - Se actualizó el SVG del logo, el favicon y el título de la pestaña para usar la marca correcta.
-   - El color principal se mantiene en la paleta TailAdmin con `#465FFF`.
-   - El texto visible en el logo ahora debe ser `Academix` y el color del símbolo/texto correcto.
-
-6. CRUD de universidades completo (frontend + backend)
-   - El modelo `University` ahora tiene `short_name` (abreviatura, ej. `UNCUYO`) e `is_active` (migración `0002` aplicada).
-   - Endpoint `/api/universities/` (UniversityViewSet con `IsAuthenticated`) para listar, crear, editar (PATCH) y eliminar.
-   - Página `frontend/src/pages/Institucional/Universidad.tsx` con CRUD completo conectado a la API.
-   - Se eliminó el bloque de texto "Institucional / Universidades / Administra..." por redundante; el botón "Nueva universidad" quedó sin ícono y en negrita.
-   - Las tarjetas de métricas de la página se eliminaron; muestra solo el listado.
-   - Estado "activa" del modal se maneja con un componente `Switch` (toggle).
-   - Ambos modales (alta/edición y eliminación) quedaron centrados; el de eliminación ocupa como máximo el 40% de la pantalla y mantiene el blur de fondo (prop `centered` agregada al `Modal`).
-
-7. Autenticación en el frontend (login local + Google OAuth)
-   - Se creó `frontend/src/context/AuthContext.tsx` (AuthProvider) que carga la sesión vía `GET /api/auth/me/` y expone `user`, `login`, `loginWithGoogle` y `logout`.
-   - `frontend/src/api/auth.ts`: servicio con `me`, `login`, `logout` y `GOOGLE_LOGIN_URL`.
-   - `SignInForm.tsx` conectado: login local (usuario/contraseña) y botón "Sign in with Google".
-   - `ProtectedRoute` (`frontend/src/components/common/ProtectedRoute.tsx`) protege el layout autenticado y redirige a `/signin`.
-   - `UserDropdown.tsx` muestra el usuario real y botón "Sign out" que llama a `logout`.
-   - En el backend, `login_view`, `me` y `logout_view` usan `@ensure_csrf_cookie` para emitir la cookie CSRF al navegador.
-
-8. Zoom persistido por usuario
-   - El nivel de zoom se guarda en `localStorage` (clave `zoom`) en `frontend/src/context/ThemeContext.tsx`; se inicializa de forma síncrona al montar.
-
-9. Menú del sidebar reorganizado
-   - `AppSidebar.tsx`: "Dashboard" quedó como enlace directo (sin submenú) y se agregó el menú "Institucional" con los submenús Universidad, Unidad Académica y Sede.
-   - Se eliminó `SidebarWidget.tsx` (bloque "Academix académico / Ir al resumen").
-   - La sidebar usa `inset-y-0` en lugar de `h-screen` para cubrir el alto visible en cualquier nivel de zoom.
-
-10. Volumen de desarrollo del frontend
-    - Se agregó bind-mount `./frontend:/app` (+ ancla `/app/node_modules`) al servicio `frontend` para que Vite refleje los cambios sin reconstruir la imagen.
-
-### Archivos clave del proyecto
-
-- `docker-compose.yml`: orquestación principal del entorno local.
-- `backend/config/settings.py`: configuración global de Django, seguridad y entorno.
-- `backend/config/urls.py`: endpoints API, health, auth y viewsets (University, AcademicUnit, Campus, Career, StudyPlan, StudyArea).
-- `backend/apps/academics/models.py`: dominio de `University`, `AcademicUnit`, `Campus`, `Career`, `StudyPlan` y `StudyArea`.
-- `backend/apps/academics/migrations/0001_initial.py`, `0002_*`, `0003_campus`, `0004_career`, `0005_studyplan` y `0006_studyarea`: migraciones aplicadas.
+- `backend/config/urls.py`: serializers + viewsets de negocio y endpoints auth.
+- `backend/apps/academics/models.py`: modelos `University`, `AcademicUnit`, `Campus`, `Career`, `StudyPlan`, `StudyArea`.
+- `backend/apps/academics/migrations/0001_initial.py`, `0002_*`, `0003_campus`, `0004_career`, `0005_studyplan`, `0006_studyarea`.
 - `backend/apps/academics/tests.py`: validación funcional de los modelos.
-- `frontend/src/api/client.ts`: cliente fetch con cookies, CSRF y manejo de errores.
-- `frontend/src/api/auth.ts`, `universities.ts`, `academicUnits.ts`, `campuses.ts`, `careers.ts`, `studyPlans.ts`, `studyAreas.ts`: servicios API.
-- `frontend/src/components/form/Combobox.tsx`: componente reutilizable de selección con búsqueda (input + lista desplegable filtrable).
-- `frontend/src/context/AuthContext.tsx`: estado de sesión, login, logout y Google.
-- `frontend/src/context/ThemeContext.tsx`: tema dark/light y zoom persistido.
-- `frontend/src/components/common/ProtectedRoute.tsx`: protección de rutas autenticadas.
-- `frontend/src/components/ui/modal/index.tsx`: Modal con props `centered`/`isFullscreen`.
-- `frontend/src/pages/Dashboard/AcademicsHome.tsx`: resumen general con métricas y listado de solo lectura de unidades académicas.
+- `frontend/src/api/universities.ts`, `academicUnits.ts`, `campuses.ts`, `careers.ts`, `studyPlans.ts`, `studyAreas.ts`: servicios API por entidad.
 - `frontend/src/pages/Institucional/Universidad.tsx`: CRUD de universidades.
 - `frontend/src/pages/Institucional/UnidadAcademica.tsx`: CRUD de unidades académicas con combobox de universidad.
 - `frontend/src/pages/Institucional/Sede.tsx`: CRUD de sedes con combobox de unidad académica.
-- `frontend/src/pages/Academica/Carreras.tsx`: CRUD de carreras (universidad → unidad académica + multiselección de sedes), `frontend/src/pages/Academica/Planes.tsx`: CRUD de planes de estudio y `frontend/src/pages/Academica/Areas.tsx`: CRUD de áreas por plan de estudio.
-- `frontend/src/layout/AppSidebar.tsx`: navegación principal (Dashboard + Institucional + Académica).
-- `frontend/index.html`: favicon y título de la pestaña.
-- `frontend/public/images/logo/*.svg`: assets del logo actualizados.
-- `.env` y `.env.example`: secretos y configuración centralizada.
+- `frontend/src/pages/Academica/Carreras.tsx`: CRUD de carreras (universidad → unidad académica + multiselección de sedes).
+- `frontend/src/pages/Academica/Planes.tsx`: CRUD de planes de estudio (universidad → unidad académica → carrera).
+- `frontend/src/pages/Academica/Areas.tsx`: CRUD de áreas (universidad → unidad académica → carrera → plan).
+- `frontend/src/pages/Dashboard/AcademicsHome.tsx`: resumen de solo lectura con métricas.
 
-### Validaciones ejecutadas y confirmadas
+## Reglas de negocio de la UI (patrón por CRUD)
 
-Se han verificado los siguientes puntos con evidencia real:
+- **Selección jerárquica en cascada dentro del modal**: se elige primero la entidad raíz y cada nivel siguiente se filtra por la selección anterior (soporta varias universidades): universidad → unidad académica → carrera → plan.
+- **Carreras**: checkboxes de sedes de la unidad académica seleccionada (multiselección). El listado muestra los códigos de las sedes.
+- **Planes**: el formulario pide código del plan, título que otorga, toggles "Activo" y "Vigente". El listado muestra código, título, carrera (nombre + código), estado activo y vigente.
+- **Áreas**: formulario con nombre del área y toggle "Activa". El listado muestra nombre, plan (título + código) y carrera (nombre + código).
+- Todas las páginas tienen búsqueda y filtro por estado activo.
 
-- `python3 backend/manage.py check` -> OK.
-- `python3 backend/manage.py test` -> 14 tests pasados.
-- `cd frontend && npm run build` -> build correcto con warnings existentes no bloqueantes.
-- `docker compose ps --format 'table {{.Service}}\t{{.Status}}'` -> servicios activos.
-- `curl -fsS http://localhost/images/logo/academix-logo.svg | grep -E '465FFF|Academix'` -> asset público con texto y color correctos.
-- CRUD `/api/universities/`, `/api/academic-units/`, `/api/campuses/`, `/api/careers/`, `/api/study-plans/` y `/api/study-areas/` validados de extremo a extremo (create 201, patch 200, list 200, delete 204) con sesión + CSRF.
-- Protección verificada: `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204. `DELETE /api/academic-units/{id}/` con sedes o carreras asociadas -> 400; sin dependencias -> 204. `DELETE /api/careers/{id}/` con planes asociados -> 400. `DELETE /api/study-plans/{id}/` con áreas asociadas -> 400.
+## Handoff de desarrollo: estado actual del dominio
 
-### Estado funcional actual
+- CRUD funcional (frontend + backend) de: universidades, unidades académicas, sedes, carreras, planes de estudio y áreas, conectados a la API bajo `/api/` con búsqueda y filtro por estado, con protección de eliminación por dependencias.
+- Dashboard (`AcademicsHome.tsx`) es un resumen de solo lectura.
+- Existe un superusuario local `admin` (creado previamente; sin commitear credenciales reales, están en `.env`).
+- Backend: `manage.py check` OK y 14 tests pasan.
+- CRUD validados de extremo a extremo (create 201, patch 200, list 200, delete 204) con sesión + CSRF.
 
-- La infraestructura base está operativa.
-- Django está configurado y pasa la validación.
-- La base de datos y Redis están disponibles.
-- El frontend está construido y sirve la marca correcta.
-- Login local (usuario/contraseña) funciona de extremo a extremo con sesión + CSRF.
-- Google OAuth configurado con credenciales reales en `.env` local (no versionadas).
-  - `LOGIN_REDIRECT_URL = "/"` -> tras autenticar vuelve al dashboard SPA y el frontend recupera la sesión vía `me()`.
-  - Callback: `http://localhost/auth/complete/google-oauth2/` (debe registrarse como Authorized redirect URI en Google Cloud Console).
-- CRUD de universidades funcional (frontend + backend) con `short_name` e `is_active`.
-  - `UniversityViewSet.destroy` bloqueado (400) si la universidad tiene unidades académicas asociadas.
-- CRUD de unidades académicas funcional en `frontend/src/pages/Institucional/UnidadAcademica.tsx` con selector de universidad (combobox con búsqueda), código, nombre corto, nombre completo, toggle de estado y protección de eliminación.
-  - Backend: `AcademicUnitSerializer` expone `university` (editable), `university_name` (lectura) y `campus_count`.
-  - `AcademicUnitViewSet.destroy` bloqueado (400) si tiene sedes o carreras asociadas.
-- CRUD de sedes funcional en `frontend/src/pages/Institucional/Sede.tsx` con combobox de unidad académica (búsqueda), código, nombre, toggle de estado y búsqueda/filtro en el listado.
-  - Backend: modelo `Campus` (FK a `AcademicUnit`), `CampusViewSet` en `/api/campuses/`, serializer con `academic_unit` (editable) y `academic_unit_name` (lectura).
-- CRUD de carreras funcional en `frontend/src/pages/Academica/Carreras.tsx` (módulo Académica del sidebar).
-  - La **facultad** es la `AcademicUnit`: cada carrera pertenece a una unidad académica.
-  - Backend: modelo `Career` (FK `academic_unit` = facultad, M2M `campuses` = sedes donde se dicta, `code`, `short_name`, `name`, `is_active`), migración `0004_career`, `CareerViewSet` en `/api/careers/` (prefetch campuses, `select_related` académica, annotate `campus_count`), serializer expone `academic_unit` (editable), `academic_unit_name` (lectura), `campuses` (editable), `campus_count` (lectura) y `campus_details` (lectura: `[{id, code, name}]` de las sedes).
-  - Frontend: en el modal se elige primero **universidad** y las **unidades académicas** y **sedes** se filtran por esa universidad (soporta varias universidades); checkboxes de sedes de la unidad académica seleccionada (multiselección), código, nombre corto, nombre, toggle "Carrera activa", búsqueda y filtro de estado. El listado muestra los **códigos** de las sedes de cada carrera.
-- CRUD de planes de estudio funcional en `frontend/src/pages/Academica/Planes.tsx` (módulo Académica del sidebar).
-  - Cada carrera tiene uno o más planes. Campos: `code` (código del plan), `title` (título que otorga), `is_active` (activo/inactivo) e `is_current` (vigente/no vigente).
-  - Backend: modelo `StudyPlan` (FK `career`), migración `0005_studyplan`, `StudyPlanViewSet` en `/api/study-plans/` (`select_related` carrera, `IsAuthenticated`), serializer expone `career` (editable), `career_name` y `career_code` (lectura), `is_active`, `is_current`.
-  - `CareerViewSet.destroy` bloqueado (400) si la carrera tiene planes de estudio asociados.
-  - Frontend: en el modal se elige **universidad → unidad académica → carrera** (cada paso filtra el siguiente); código del plan, título que otorga, toggles "Activo" y "Vigente", búsqueda y filtro por activo. El listado muestra código, título, carrera (nombre + código), estado activo y estado vigente.
-- CRUD de áreas funcional en `frontend/src/pages/Academica/Areas.tsx` (módulo Académica del sidebar).
-  - Cada plan de estudios tiene una o más áreas. Campos: `name` (nombre del área) e `is_active` (activa/inactiva).
-  - Backend: modelo `StudyArea` (FK `study_plan`), migración `0006_studyarea`, `StudyAreaViewSet` en `/api/study-areas/` (`select_related` plan y carrera, `IsAuthenticated`), serializer expone `study_plan` (editable), `study_plan_code`/`study_plan_title`/`career_name`/`career_code` (lectura), `is_active`.
-  - `StudyPlanViewSet.destroy` bloqueado (400) si el plan tiene áreas asociadas.
-  - Frontend: en el modal se elige **universidad → unidad académica → carrera → plan de estudios** (cada paso filtra el siguiente); nombre del área, toggle "Activa", búsqueda y filtro por activa. El listado muestra nombre, plan (título + código) y carrera (nombre + código).
-- Dashboard (`AcademicsHome.tsx`) muestra "Resumen general" con métricas y listado de solo lectura de unidades (el CRUD vive en la página Institucional/UnidadAcademica).
-- Existe un superusuario local `admin` (creado en estas tareas; sin commitear credenciales reales).
+### Siguientes tareas recomendadas de negocio
 
-### Siguientes tareas recomendadas
-
-1. Registrar/verificar URIs de redirección en Google Cloud Console
-   - Confirmar que `http://localhost/auth/complete/google-oauth2/` esté en Authorized redirect URIs de la OAuth Client.
-   - Probar el flujo completo en el navegador (botón "Sign in with Google" -> volver al dashboard).
-
-2. Expandir el dominio académico
-   - Añadir más modelos y endpoints según el backlog: estudiantes, docentes, cursos, matrículas, periodos, notificaciones.
-
-3. Reforzar la capa de seguridad
-   - Revisar permisos, validación de CSRF, headers y manejo de sesiones en producción.
-
-### Reglas de continuación
-
-- No hardcodear secretos ni valores sensibles en código.
-- Mantener `.env` fuera del control de versiones; solo `.env.example` debe versionarse.
-- Antes de editar, formular una hipótesis simple y ejecutar una validación breve.
-- Tras cambios, ejecutar al menos: validación del backend (`manage.py check` o tests) o build del frontend si se modifica UI.
-- Si se trabaja con Docker, validar el estado real con `docker compose ps` y reintentar con `docker compose up -d --build <servicio>` cuando sea requerido.
-- Si la marca visual parece no actualizarse, evitar repetir cambios hasta forzar caché del navegador (`Ctrl + F5`).
-- El servicio `frontend` monta `./frontend:/app` (bind-mount), por lo que los cambios se reflejan sin reconstruir la imagen; tras editar JS/TSX conviene validar con el build.
-- El backend monta `./backend:/app`; Gunicorn no hace hot-reload, por lo que tras editar backend hay que reconstruir/reiniciar el servicio.
-
-### Comandos de referencia
-
-```bash
-cp .env.example .env
-python3 backend/manage.py check
-python3 backend/manage.py test
-docker compose ps --format 'table {{.Service}}\t{{.Status}}'
-cd frontend && npm run build
-docker compose up -d --build frontend
-docker compose restart nginx
-```
-
-### Resumen ejecutivo
-
-La base del proyecto está preparada, dockerizada y validada con branding de Academix corregido. Ya están funcionales: autenticación local, Google OAuth (credenciales reales en `.env`, `LOGIN_REDIRECT_URL="/"`, callback `/auth/complete/google-oauth2/`), protección de rutas, zoom y tema persistidos, CRUD de universidades, CRUD de unidades académicas, CRUD de sedes, CRUD de carreras (módulo Académica, con la unidad académica como facultad y multiselección de sedes), CRUD de planes de estudio (módulo Académica) y CRUD de áreas (módulo Académica, dependientes del plan de estudios), todos conectados a la API bajo `/api/` con búsqueda y filtro por estado. El dashboard es un resumen de solo lectura. Queda pendiente: verificar las URIs de redirección de Google Cloud Console y la expansión del dominio académico. El siguiente agente debe centrarse en la expansión del dominio, manteniendo la seguridad y la estructura ya validada.
+1. **Verificar URIs de redirección de Google OAuth** en Google Cloud Console (ver `agents_base.md` para el callback).
+2. **Expandir el dominio académico**: estudiantes, docentes, cursos, matrículas, periodos, notificaciones (siguiendo el patrón jerárquico con códigos + estado activo y protección de eliminación).
+3. **Reforzar la capa de seguridad**: permisos, validación de CSRF, headers y manejo de sesiones en producción.

@@ -19,6 +19,7 @@ type PlanForm = StudyPlanPayload & { university: number; academic_unit: number }
 const EMPTY_FORM: PlanForm = {
   code: "",
   title: "",
+  intermediate_title: "",
   career: 0,
   is_active: true,
   is_current: false,
@@ -105,6 +106,7 @@ export default function Planes() {
       !term ||
       plan.code.toLowerCase().includes(term) ||
       plan.title.toLowerCase().includes(term) ||
+      plan.intermediate_title.toLowerCase().includes(term) ||
       plan.career_name.toLowerCase().includes(term) ||
       plan.career_code.toLowerCase().includes(term);
     const matchesStatus =
@@ -130,6 +132,7 @@ export default function Planes() {
     setForm({
       code: plan.code,
       title: plan.title,
+      intermediate_title: plan.intermediate_title,
       career: plan.career,
       is_active: plan.is_active,
       is_current: plan.is_current,
@@ -200,7 +203,28 @@ export default function Planes() {
 
       <div className="space-y-6">
         <div className="flex justify-end">
-          <Button onClick={openCreate} size="sm" className="font-bold">
+          <Button
+            onClick={openCreate}
+            size="sm"
+            className="font-bold"
+            startIcon={
+              <svg
+                className="h-4 w-4"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M8 3v10M3 8h10"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
+          >
             Nuevo plan
           </Button>
         </div>
@@ -274,11 +298,12 @@ export default function Planes() {
                 No se encontraron planes con los criterios de búsqueda.
               </div>
             ) : (
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[860px] text-left text-sm">
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-white/[0.02] dark:text-gray-400">
                   <tr>
                     <th className="px-5 py-3">Código</th>
                     <th className="px-5 py-3">Título que otorga</th>
+                    <th className="px-5 py-3">Título intermedio</th>
                     <th className="px-5 py-3">Carrera</th>
                     <th className="px-5 py-3">Activo</th>
                     <th className="px-5 py-3">Vigente</th>
@@ -296,6 +321,11 @@ export default function Planes() {
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
                         {plan.title}
+                      </td>
+                      <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
+                        {plan.intermediate_title || (
+                          <span className="text-gray-400 dark:text-gray-500">—</span>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
                         <div className="font-medium text-gray-800 dark:text-white">
@@ -431,6 +461,19 @@ export default function Planes() {
                   placeholder="Ej. Ingeniero en Informática"
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="plan-intermediate-title">
+                  Título intermedio
+                </Label>
+                <Input
+                  id="plan-intermediate-title"
+                  placeholder="Ej. Técnico Universitario en Informática (opcional)"
+                  value={form.intermediate_title}
+                  onChange={(e) =>
+                    setForm({ ...form, intermediate_title: e.target.value })
+                  }
                 />
               </div>
             </div>

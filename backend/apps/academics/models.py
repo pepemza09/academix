@@ -91,6 +91,7 @@ class StudyPlan(models.Model):
     )
     code = models.CharField(max_length=30)
     title = models.CharField(max_length=255)
+    intermediate_title = models.CharField(max_length=255, blank=True)
     is_active = models.BooleanField(default=True)
     is_current = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

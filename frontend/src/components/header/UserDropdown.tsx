@@ -25,9 +25,17 @@ export default function UserDropdown() {
         className="flex items-center text-gray-700 dropdown-toggle dark:text-gray-400"
       >
         <span className="mr-3 overflow-hidden rounded-full h-11 w-11 bg-brand-100 dark:bg-brand-500/20 flex items-center justify-center">
-          <span className="text-brand-600 dark:text-brand-400 font-semibold text-sm">
-            {displayName.charAt(0).toUpperCase()}
-          </span>
+          {user?.avatar ? (
+            <img
+              src={user.avatar}
+              alt={displayName}
+              className="object-cover w-full h-full"
+            />
+          ) : (
+            <span className="text-brand-600 dark:text-brand-400 font-semibold text-sm">
+              {displayName.charAt(0).toUpperCase()}
+            </span>
+          )}
         </span>
 
         <span className="block mr-1 font-medium text-theme-sm">{displayName}</span>
@@ -88,7 +96,7 @@ export default function UserDropdown() {
                   fill=""
                 />
               </svg>
-              Edit profile
+              Editar perfil
             </DropdownItem>
           </li>
         </ul>
@@ -115,9 +123,8 @@ export default function UserDropdown() {
               fill=""
             />
           </svg>
-          Sign out
-        </button>
-      </Dropdown>
+          Cerrar sesión
+        </button>      </Dropdown>
     </div>
   );
 }

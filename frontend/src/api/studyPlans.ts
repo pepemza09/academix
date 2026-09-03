@@ -4,6 +4,7 @@ export interface StudyPlan {
   id: number;
   code: string;
   title: string;
+  intermediate_title: string;
   career: number;
   career_name: string;
   career_code: string;
@@ -14,6 +15,7 @@ export interface StudyPlan {
 export interface StudyPlanPayload {
   code: string;
   title: string;
+  intermediate_title: string;
   career: number;
   is_active: boolean;
   is_current: boolean;
