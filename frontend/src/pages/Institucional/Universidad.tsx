@@ -96,12 +96,15 @@ export default function Universidad() {
     setSaving(true);
     try {
       if (editing) {
-        await universityApi.update(editing.id, form);
+        const updated = await universityApi.update(editing.id, form);
+        setUniversities((prev) =>
+          prev.map((u) => (u.id === updated.id ? updated : u)),
+        );
       } else {
-        await universityApi.create(form);
+        const created = await universityApi.create(form);
+        setUniversities((prev) => [...prev, created]);
       }
       setModalOpen(false);
-      fetchUniversities();
     } catch (e) {
       setFormError(
         e instanceof Error ? e.message : "No se pudo guardar la universidad.",
@@ -116,8 +119,10 @@ export default function Universidad() {
     setDeleting(true);
     try {
       await universityApi.remove(deleteTarget.id);
+      setUniversities((prev) =>
+        prev.filter((u) => u.id !== deleteTarget.id),
+      );
       setDeleteTarget(null);
-      fetchUniversities();
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "No se pudo eliminar la universidad.",

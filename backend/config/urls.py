@@ -252,8 +252,8 @@ def health(request):
 
 def user_payload(user):
     is_local = not user.social_auth.exists()
-    profile, _ = Profile.objects.get_or_create(user=user)
-    avatar = profile.avatar.url if profile.avatar else None
+    profile = Profile.objects.filter(user=user).only("avatar").first()
+    avatar = profile.avatar.url if profile and profile.avatar else None
     return {
         "id": user.id,
         "username": user.username,

@@ -162,12 +162,15 @@ export default function Carreras() {
     setSaving(true);
     try {
       if (editing) {
-        await careerApi.update(editing.id, form);
+        const updated = await careerApi.update(editing.id, form);
+        setCareers((prev) =>
+          prev.map((c) => (c.id === updated.id ? updated : c)),
+        );
       } else {
-        await careerApi.create(form);
+        const created = await careerApi.create(form);
+        setCareers((prev) => [...prev, created]);
       }
       setModalOpen(false);
-      fetchData();
     } catch (e) {
       setFormError(
         e instanceof Error ? e.message : "No se pudo guardar la carrera.",
@@ -182,8 +185,8 @@ export default function Carreras() {
     setDeleting(true);
     try {
       await careerApi.remove(deleteTarget.id);
+      setCareers((prev) => prev.filter((c) => c.id !== deleteTarget.id));
       setDeleteTarget(null);
-      fetchData();
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "No se pudo eliminar la carrera.",

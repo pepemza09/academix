@@ -118,12 +118,15 @@ export default function Sede() {
     setSaving(true);
     try {
       if (editing) {
-        await campusApi.update(editing.id, form);
+        const updated = await campusApi.update(editing.id, form);
+        setCampuses((prev) =>
+          prev.map((c) => (c.id === updated.id ? updated : c)),
+        );
       } else {
-        await campusApi.create(form);
+        const created = await campusApi.create(form);
+        setCampuses((prev) => [...prev, created]);
       }
       setModalOpen(false);
-      fetchData();
     } catch (e) {
       setFormError(
         e instanceof Error ? e.message : "No se pudo guardar la sede.",
@@ -138,8 +141,8 @@ export default function Sede() {
     setDeleting(true);
     try {
       await campusApi.remove(deleteTarget.id);
+      setCampuses((prev) => prev.filter((c) => c.id !== deleteTarget.id));
       setDeleteTarget(null);
-      fetchData();
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "No se pudo eliminar la sede.",

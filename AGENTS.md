@@ -87,8 +87,15 @@ Protección de eliminación verificada (regla de integridad referencial):
 - CRUD funcional (frontend + backend) de: universidades, unidades académicas, sedes, carreras, planes de estudio y áreas, conectados a la API bajo `/api/` con búsqueda y filtro por estado, con protección de eliminación por dependencias.
 - Dashboard (`AcademicsHome.tsx`) es un resumen de solo lectura.
 - Existe un superusuario local `admin` (creado previamente; sin commitear credenciales reales, están en `.env`).
-- Backend: `manage.py check` OK y 14 tests pasan.
+- Backend: `manage.py check` OK y 16 tests pasan.
 - CRUD validados de extremo a extremo (create 201, patch 200, list 200, delete 204) con sesión + CSRF.
+
+### Optimización de rendimiento (frontend)
+
+- **Code-splitting**: `App.tsx` carga todas las rutas con `React.lazy` + `Suspense`. El bundle principal bajó de 674KB a ~286KB (gzip ~90KB); cada página CRUD es un chunk separado (~12KB) y el Calendario (264KB) se carga on-demand.
+- **Updates optimistas en las páginas CRUD**: al crear/editar/eliminar, las 6 páginas (`Universidad`, `UnidadAcademica`, `Sede`, `Carreras`, `Planes`, `Areas`) actualizan el estado local con la respuesta de la API en lugar de relanzar `fetchData()` (que recargaba todas las listas de dependencias por red). `fetchData()` solo corre en el `useEffect` inicial de montaje.
+- **Backend `/api/auth/me/`**: `user_payload` usa una consulta read-only (`Profile.objects.filter(...).only("avatar")`) en vez de `get_or_create` por request; el perfil se crea solo al subir avatar.
+- Los serializers de listado ya usan `select_related`/`prefetch_related`/`annotate` (sin N+1).
 
 ### Siguientes tareas recomendadas de negocio
 

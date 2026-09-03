@@ -124,12 +124,15 @@ export default function UnidadAcademica() {
     setSaving(true);
     try {
       if (editing) {
-        await academicUnitApi.update(editing.id, form);
+        const updated = await academicUnitApi.update(editing.id, form);
+        setUnits((prev) =>
+          prev.map((u) => (u.id === updated.id ? updated : u)),
+        );
       } else {
-        await academicUnitApi.create(form);
+        const created = await academicUnitApi.create(form);
+        setUnits((prev) => [...prev, created]);
       }
       setModalOpen(false);
-      fetchData();
     } catch (e) {
       setFormError(
         e instanceof Error ? e.message : "No se pudo guardar la unidad.",
@@ -144,8 +147,8 @@ export default function UnidadAcademica() {
     setDeleting(true);
     try {
       await academicUnitApi.remove(deleteTarget.id);
+      setUnits((prev) => prev.filter((u) => u.id !== deleteTarget.id));
       setDeleteTarget(null);
-      fetchData();
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "No se pudo eliminar la unidad.",

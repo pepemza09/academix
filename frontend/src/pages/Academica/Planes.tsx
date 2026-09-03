@@ -164,12 +164,13 @@ export default function Planes() {
     setSaving(true);
     try {
       if (editing) {
-        await studyPlanApi.update(editing.id, form);
+        const updated = await studyPlanApi.update(editing.id, form);
+        setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       } else {
-        await studyPlanApi.create(form);
+        const created = await studyPlanApi.create(form);
+        setPlans((prev) => [...prev, created]);
       }
       setModalOpen(false);
-      fetchData();
     } catch (e) {
       setFormError(
         e instanceof Error ? e.message : "No se pudo guardar el plan.",
@@ -184,8 +185,8 @@ export default function Planes() {
     setDeleting(true);
     try {
       await studyPlanApi.remove(deleteTarget.id);
+      setPlans((prev) => prev.filter((p) => p.id !== deleteTarget.id));
       setDeleteTarget(null);
-      fetchData();
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "No se pudo eliminar el plan.",

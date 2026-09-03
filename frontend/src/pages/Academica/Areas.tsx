@@ -183,12 +183,15 @@ export default function Areas() {
     setSaving(true);
     try {
       if (editing) {
-        await studyAreaApi.update(editing.id, form);
+        const updated = await studyAreaApi.update(editing.id, form);
+        setAreas((prev) =>
+          prev.map((a) => (a.id === updated.id ? updated : a)),
+        );
       } else {
-        await studyAreaApi.create(form);
+        const created = await studyAreaApi.create(form);
+        setAreas((prev) => [...prev, created]);
       }
       setModalOpen(false);
-      fetchData();
     } catch (e) {
       setFormError(
         e instanceof Error ? e.message : "No se pudo guardar el área.",
@@ -203,8 +206,8 @@ export default function Areas() {
     setDeleting(true);
     try {
       await studyAreaApi.remove(deleteTarget.id);
+      setAreas((prev) => prev.filter((a) => a.id !== deleteTarget.id));
       setDeleteTarget(null);
-      fetchData();
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "No se pudo eliminar el área.",
