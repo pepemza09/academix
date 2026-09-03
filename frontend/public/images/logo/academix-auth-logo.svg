@@ -1,5 +1,5 @@
-<svg width="166" height="42" viewBox="0 0 166 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="2" width="36" height="36" rx="10" fill="#465FFF"/>
-  <path d="M11 31L19.6 13H21.8L30 31H25.9L23.9 26.5H16.9L14.9 31H11ZM18.3 23.1H22.5L20.4 18.2L18.3 23.1Z" fill="white"/>
-  <text x="48" y="28.5" fill="white" font-family="Outfit, sans-serif" font-size="23" font-weight="700">Academix</text>
+<svg width="190" height="42" viewBox="0 0 190 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="2" width="38" height="38" rx="10" fill="#465FFF"/>
+  <path d="M11.5 30L20.1 12H22.3L30.5 30H26.4L24.4 25.5H17.4L15.4 30H11.5ZM18.8 22.1H23L20.9 17.2L18.8 22.1Z" fill="white"/>
+  <text x="48" y="30" fill="white" font-family="Outfit, sans-serif" font-size="25" font-weight="700">Academix</text>
 </svg>

@@ -21,16 +21,16 @@ export default function AuthLayout({
 
   return (
     <div className="relative p-6 bg-white z-1 sm:p-0">
-      <div className="relative flex flex-col justify-center w-full min-h-screen lg:flex-row sm:p-0">
+      <div className="relative flex flex-col justify-center w-full min-h-screen lg:h-screen lg:flex-row sm:p-0">
         {children}
-        <div className="flex-col items-center justify-center hidden w-full min-h-screen lg:w-1/2 bg-brand-950 lg:flex">
+        <div className="flex-col items-center justify-center hidden w-full h-full min-h-screen lg:w-1/2 bg-brand-950 lg:flex">
           <div className="relative flex items-center justify-center z-1">
             {/* <!-- ===== Common Grid Shape Start ===== --> */}
             <GridShape />
             <div className="flex flex-col items-center max-w-xs">
               <Link to="/" className="block mb-4">
                 <img
-                  width={166}
+                  width={190}
                   height={42}
                   src="/images/logo/academix-auth-logo.svg"
                   alt="Academix"
