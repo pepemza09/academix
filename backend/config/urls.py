@@ -17,6 +17,7 @@ from apps.academics.models import (
     Career,
     StudyArea,
     StudyPlan,
+    Subject,
     University,
 )
 from apps.users.models import Profile
@@ -117,6 +118,17 @@ class CampusViewSet(viewsets.ModelViewSet):
     serializer_class = CampusSerializer
     permission_classes = [IsAuthenticated]
 
+    def destroy(self, request, *args, **kwargs):
+        campus = self.get_object()
+        if campus.careers.exists():
+            return Response(
+                {
+                    "detail": "No se puede eliminar una sede que está asociada a carreras."
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
 
 class CareerSerializer(serializers.ModelSerializer):
     academic_unit_name = serializers.CharField(
@@ -177,6 +189,7 @@ class StudyPlanSerializer(serializers.ModelSerializer):
             "code",
             "title",
             "intermediate_title",
+            "duration_years",
             "career",
             "career_name",
             "career_code",
@@ -235,6 +248,81 @@ class StudyAreaViewSet(viewsets.ModelViewSet):
     serializer_class = StudyAreaSerializer
     permission_classes = [IsAuthenticated]
 
+    def destroy(self, request, *args, **kwargs):
+        study_area = self.get_object()
+        if study_area.subjects.exists():
+            return Response(
+                {
+                    "detail": "No se puede eliminar un área que tiene materias asociadas."
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class SubjectSerializer(serializers.ModelSerializer):
+    period_label = serializers.CharField(
+        source="get_period_display", read_only=True
+    )
+    study_area_name = serializers.CharField(
+        source="study_area.name", read_only=True
+    )
+    study_plan_code = serializers.CharField(
+        source="study_area.study_plan.code", read_only=True
+    )
+    study_plan_title = serializers.CharField(
+        source="study_area.study_plan.title", read_only=True
+    )
+    career_name = serializers.CharField(
+        source="study_area.study_plan.career.name", read_only=True
+    )
+    career_code = serializers.CharField(
+        source="study_area.study_plan.career.code", read_only=True
+    )
+    duration_years = serializers.IntegerField(
+        source="study_area.study_plan.duration_years", read_only=True
+    )
+
+    class Meta:
+        model = Subject
+        fields = [
+            "id",
+            "code",
+            "name",
+            "year",
+            "period",
+            "period_label",
+            "study_area",
+            "study_area_name",
+            "study_plan_code",
+            "study_plan_title",
+            "career_name",
+            "career_code",
+            "duration_years",
+            "is_active",
+        ]
+
+    def validate(self, attrs):
+        year = attrs.get("year", getattr(self.instance, "year", None))
+        study_area = attrs.get(
+            "study_area", getattr(self.instance, "study_area", None)
+        )
+        if year and study_area:
+            duration = study_area.study_plan.duration_years
+            if year < 1 or year > duration:
+                raise serializers.ValidationError(
+                    {"year": f"El año debe estar entre 1 y {duration} (duración del plan)."}
+                )
+        return attrs
+
+
+class SubjectViewSet(viewsets.ModelViewSet):
+    queryset = Subject.objects.select_related(
+        "study_area__study_plan__career"
+    ).all()
+    serializer_class = SubjectSerializer
+    permission_classes = [IsAuthenticated]
+
 
 router = DefaultRouter()
 router.register("universities", UniversityViewSet, basename="university")
@@ -243,6 +331,7 @@ router.register("campuses", CampusViewSet, basename="campus")
 router.register("careers", CareerViewSet, basename="career")
 router.register("study-plans", StudyPlanViewSet, basename="study-plan")
 router.register("study-areas", StudyAreaViewSet, basename="study-area")
+router.register("subjects", SubjectViewSet, basename="subject")
 
 
 @require_http_methods(["GET"])

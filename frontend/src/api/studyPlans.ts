@@ -5,6 +5,7 @@ export interface StudyPlan {
   code: string;
   title: string;
   intermediate_title: string;
+  duration_years: number;
   career: number;
   career_name: string;
   career_code: string;
@@ -16,6 +17,7 @@ export interface StudyPlanPayload {
   code: string;
   title: string;
   intermediate_title: string;
+  duration_years: number;
   career: number;
   is_active: boolean;
   is_current: boolean;

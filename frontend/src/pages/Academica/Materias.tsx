@@ -9,26 +9,41 @@ import Label from "../../components/form/Label";
 import Badge from "../../components/ui/badge/Badge";
 import Switch from "../../components/form/switch/Switch";
 import { PencilIcon, TrashBinIcon } from "../../icons";
-import { StudyPlan, StudyPlanPayload, studyPlanApi } from "../../api/studyPlans";
+import {
+  PERIOD_OPTIONS,
+  Subject,
+  SubjectPayload,
+  subjectApi,
+} from "../../api/subjects";
+import { StudyArea, studyAreaApi } from "../../api/studyAreas";
+import { StudyPlan, studyPlanApi } from "../../api/studyPlans";
 import { Career, careerApi } from "../../api/careers";
 import { AcademicUnit, academicUnitApi } from "../../api/academicUnits";
 import { University, universityApi } from "../../api/universities";
 
-type PlanForm = StudyPlanPayload & { university: number; academic_unit: number };
-
-const EMPTY_FORM: PlanForm = {
-  code: "",
-  title: "",
-  intermediate_title: "",
-  duration_years: 5,
-  career: 0,
-  is_active: true,
-  is_current: false,
-  university: 0,
-  academic_unit: 0,
+type SubjectForm = SubjectPayload & {
+  university: number;
+  academic_unit: number;
+  career: number;
+  study_plan: number;
 };
 
-export default function Planes() {
+const EMPTY_FORM: SubjectForm = {
+  code: "",
+  name: "",
+  year: 1,
+  period: "1Q",
+  study_area: 0,
+  is_active: true,
+  university: 0,
+  academic_unit: 0,
+  career: 0,
+  study_plan: 0,
+};
+
+export default function Materias() {
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [areas, setAreas] = useState<StudyArea[]>([]);
   const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [careers, setCareers] = useState<Career[]>([]);
   const [academicUnits, setAcademicUnits] = useState<AcademicUnit[]>([]);
@@ -37,12 +52,12 @@ export default function Planes() {
   const [error, setError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<StudyPlan | null>(null);
-  const [form, setForm] = useState<PlanForm>(EMPTY_FORM);
+  const [editing, setEditing] = useState<Subject | null>(null);
+  const [form, setForm] = useState<SubjectForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const [deleteTarget, setDeleteTarget] = useState<StudyPlan | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -52,13 +67,23 @@ export default function Planes() {
     setLoading(true);
     setError(null);
     try {
-      const [plansData, careersData, unitsData, universitiesData] =
-        await Promise.all([
-          studyPlanApi.list(),
-          careerApi.list(),
-          academicUnitApi.list(),
-          universityApi.list(),
-        ]);
+      const [
+        subjectsData,
+        areasData,
+        plansData,
+        careersData,
+        unitsData,
+        universitiesData,
+      ] = await Promise.all([
+        subjectApi.list(),
+        studyAreaApi.list(),
+        studyPlanApi.list(),
+        careerApi.list(),
+        academicUnitApi.list(),
+        universityApi.list(),
+      ]);
+      setSubjects(subjectsData);
+      setAreas(areasData);
       setPlans(plansData);
       setCareers(careersData);
       setAcademicUnits(unitsData);
@@ -67,7 +92,7 @@ export default function Planes() {
       setError(
         e instanceof Error
           ? e.message
-          : "No se pudieron cargar los planes de estudio.",
+          : "No se pudieron cargar las materias.",
       );
     } finally {
       setLoading(false);
@@ -77,6 +102,11 @@ export default function Planes() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const selectedPlan = form.study_plan
+    ? plans.find((p) => p.id === form.study_plan)
+    : undefined;
+  const planDuration = selectedPlan ? selectedPlan.duration_years : 0;
 
   const universityOptions = universities.map((u) => ({
     value: u.id,
@@ -101,19 +131,37 @@ export default function Planes() {
     label: c.short_name ? `${c.name} (${c.short_name})` : c.name,
   }));
 
-  const filteredPlans = plans.filter((plan) => {
+  const availablePlans = form.career
+    ? plans.filter((p) => p.career === form.career)
+    : [];
+
+  const planOptions = availablePlans.map((p) => ({
+    value: p.id,
+    label: `${p.code} - ${p.title}`,
+  }));
+
+  const availableAreas = form.study_plan
+    ? areas.filter((a) => a.study_plan === form.study_plan)
+    : [];
+
+  const areaOptions = availableAreas.map((a) => ({
+    value: a.id,
+    label: a.name,
+  }));
+
+  const filteredSubjects = subjects.filter((subject) => {
     const term = search.trim().toLowerCase();
     const matchesSearch =
       !term ||
-      plan.code.toLowerCase().includes(term) ||
-      plan.title.toLowerCase().includes(term) ||
-      plan.intermediate_title.toLowerCase().includes(term) ||
-      plan.career_name.toLowerCase().includes(term) ||
-      plan.career_code.toLowerCase().includes(term);
+      subject.code.toLowerCase().includes(term) ||
+      subject.name.toLowerCase().includes(term) ||
+      subject.career_name.toLowerCase().includes(term) ||
+      subject.career_code.toLowerCase().includes(term) ||
+      subject.study_area_name.toLowerCase().includes(term);
     const matchesStatus =
       statusFilter === "all" ||
-      (statusFilter === "active" && plan.is_active) ||
-      (statusFilter === "inactive" && !plan.is_active);
+      (statusFilter === "active" && subject.is_active) ||
+      (statusFilter === "inactive" && !subject.is_active);
     return matchesSearch && matchesStatus;
   });
 
@@ -124,22 +172,29 @@ export default function Planes() {
     setModalOpen(true);
   };
 
-  const openEdit = (plan: StudyPlan) => {
-    const career = careers.find((c) => c.id === plan.career);
+  const openEdit = (subject: Subject) => {
+    const area = areas.find((a) => a.id === subject.study_area);
+    const plan = area
+      ? plans.find((p) => p.id === area.study_plan)
+      : undefined;
+    const career = plan
+      ? careers.find((c) => c.id === plan.career)
+      : undefined;
     const unit = career
       ? academicUnits.find((u) => u.id === career.academic_unit)
       : undefined;
-    setEditing(plan);
+    setEditing(subject);
     setForm({
-      code: plan.code,
-      title: plan.title,
-      intermediate_title: plan.intermediate_title,
-      duration_years: plan.duration_years,
-      career: plan.career,
-      is_active: plan.is_active,
-      is_current: plan.is_current,
+      code: subject.code,
+      name: subject.name,
+      year: subject.year,
+      period: subject.period,
+      study_area: subject.study_area,
+      is_active: subject.is_active,
       university: unit ? unit.university : 0,
       academic_unit: career ? career.academic_unit : 0,
+      career: plan ? plan.career : 0,
+      study_plan: area ? area.study_plan : 0,
     });
     setFormError(null);
     setModalOpen(true);
@@ -159,27 +214,41 @@ export default function Planes() {
       setFormError("Debes seleccionar una carrera.");
       return;
     }
-    if (!form.code.trim() || !form.title.trim()) {
-      setFormError("El código del plan y el título que otorga son obligatorios.");
+    if (!form.study_plan) {
+      setFormError("Debes seleccionar un plan de estudios.");
       return;
     }
-    if (!form.duration_years || form.duration_years < 1) {
-      setFormError("La duración del plan debe ser al menos 1 año.");
+    if (!form.study_area) {
+      setFormError("Debes seleccionar un área.");
+      return;
+    }
+    if (!form.code.trim() || !form.name.trim()) {
+      setFormError("El código y el nombre de la materia son obligatorios.");
+      return;
+    }
+    if (!form.year || form.year < 1 || (planDuration && form.year > planDuration)) {
+      setFormError(
+        planDuration
+          ? `El año debe estar entre 1 y ${planDuration} (duración del plan).`
+          : "El año debe ser al menos 1.",
+      );
       return;
     }
     setSaving(true);
     try {
       if (editing) {
-        const updated = await studyPlanApi.update(editing.id, form);
-        setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        const updated = await subjectApi.update(editing.id, form);
+        setSubjects((prev) =>
+          prev.map((s) => (s.id === updated.id ? updated : s)),
+        );
       } else {
-        const created = await studyPlanApi.create(form);
-        setPlans((prev) => [...prev, created]);
+        const created = await subjectApi.create(form);
+        setSubjects((prev) => [...prev, created]);
       }
       setModalOpen(false);
     } catch (e) {
       setFormError(
-        e instanceof Error ? e.message : "No se pudo guardar el plan.",
+        e instanceof Error ? e.message : "No se pudo guardar la materia.",
       );
     } finally {
       setSaving(false);
@@ -190,12 +259,12 @@ export default function Planes() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await studyPlanApi.remove(deleteTarget.id);
-      setPlans((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      await subjectApi.remove(deleteTarget.id);
+      setSubjects((prev) => prev.filter((s) => s.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "No se pudo eliminar el plan.",
+        e instanceof Error ? e.message : "No se pudo eliminar la materia.",
       );
       setDeleteTarget(null);
     } finally {
@@ -205,8 +274,8 @@ export default function Planes() {
 
   return (
     <div>
-      <PageMeta title="Academix" description="Gestión de planes de estudio" />
-      <PageBreadcrumb pageTitle="Planes" />
+      <PageMeta title="Academix" description="Gestión de materias" />
+      <PageBreadcrumb pageTitle="Materias" />
 
       <div className="space-y-6">
         <div className="flex justify-end">
@@ -232,7 +301,7 @@ export default function Planes() {
               </svg>
             }
           >
-            Nuevo plan
+            Nueva materia
           </Button>
         </div>
 
@@ -245,7 +314,7 @@ export default function Planes() {
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
           <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
             <h2 className="font-semibold text-gray-900 dark:text-white">
-              Listado de planes de estudio
+              Listado de materias
             </h2>
           </div>
 
@@ -255,7 +324,7 @@ export default function Planes() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por código, título o carrera…"
+                placeholder="Buscar por código, nombre, área o carrera…"
                 className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 pr-10 text-sm shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
               <svg
@@ -283,13 +352,13 @@ export default function Planes() {
                 className="h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
               >
                 <option value="all" className="bg-white text-gray-800 dark:bg-gray-900 dark:text-white/90">
-                  Todos
+                  Todas
                 </option>
                 <option value="active" className="bg-white text-gray-800 dark:bg-gray-900 dark:text-white/90">
-                  Solo activos
+                  Solo activas
                 </option>
                 <option value="inactive" className="bg-white text-gray-800 dark:bg-gray-900 dark:text-white/90">
-                  Solo inactivos
+                  Solo inactivas
                 </option>
               </select>
             </div>
@@ -298,83 +367,85 @@ export default function Planes() {
           <div className="overflow-x-auto">
             {loading ? (
               <div className="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
-                Cargando planes…
+                Cargando materias…
               </div>
-            ) : filteredPlans.length === 0 ? (
+            ) : filteredSubjects.length === 0 ? (
               <div className="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
-                No se encontraron planes con los criterios de búsqueda.
+                No se encontraron materias con los criterios de búsqueda.
               </div>
             ) : (
-              <table className="w-full min-w-[860px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-left text-sm">
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-white/[0.02] dark:text-gray-400">
                   <tr>
                     <th className="px-5 py-3">Código</th>
-                    <th className="px-5 py-3">Título que otorga</th>
-                    <th className="px-5 py-3">Título intermedio</th>
+                    <th className="px-5 py-3">Nombre</th>
+                    <th className="px-5 py-3">Año</th>
+                    <th className="px-5 py-3">Período</th>
+                    <th className="px-5 py-3">Área</th>
+                    <th className="px-5 py-3">Plan</th>
                     <th className="px-5 py-3">Carrera</th>
-                    <th className="px-5 py-3">Duración</th>
-                    <th className="px-5 py-3">Activo</th>
-                    <th className="px-5 py-3">Vigente</th>
+                    <th className="px-5 py-3">Activa</th>
                     <th className="px-5 py-3 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {filteredPlans.map((plan) => (
+                  {filteredSubjects.map((subject) => (
                     <tr
-                      key={plan.id}
+                      key={subject.id}
                       className="hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                     >
                       <td className="px-5 py-4 font-medium text-gray-900 dark:text-white">
-                        {plan.code}
+                        {subject.code}
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
-                        {plan.title}
+                        {subject.name}
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
-                        {plan.intermediate_title || (
-                          <span className="text-gray-400 dark:text-gray-500">—</span>
-                        )}
+                        {subject.year}
+                      </td>
+                      <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
+                        {subject.period_label}
+                      </td>
+                      <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
+                        {subject.study_area_name}
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
                         <div className="font-medium text-gray-800 dark:text-white">
-                          {plan.career_name}
+                          {subject.study_plan_title}
                         </div>
                         <div className="text-xs text-gray-400 dark:text-gray-500">
-                          {plan.career_code}
+                          {subject.study_plan_code}
                         </div>
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
-                        {plan.duration_years}{" "}
-                        {plan.duration_years === 1 ? "año" : "años"}
+                        <div className="font-medium text-gray-800 dark:text-white">
+                          {subject.career_name}
+                        </div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500">
+                          {subject.career_code}
+                        </div>
                       </td>
                       <td className="px-5 py-4">
-                        {plan.is_active ? (
-                          <Badge color="success">Activo</Badge>
+                        {subject.is_active ? (
+                          <Badge color="success">Activa</Badge>
                         ) : (
-                          <Badge color="warning">Inactivo</Badge>
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
-                        {plan.is_current ? (
-                          <Badge color="success">Vigente</Badge>
-                        ) : (
-                          <Badge color="light">No vigente</Badge>
+                          <Badge color="warning">Inactiva</Badge>
                         )}
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => openEdit(plan)}
+                            onClick={() => openEdit(subject)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:text-gray-400 dark:hover:bg-white/5"
-                            aria-label={`Editar ${plan.code}`}
+                            aria-label={`Editar ${subject.name}`}
                             title="Editar"
                           >
                             <PencilIcon className="size-4" />
                           </button>
                           <button
-                            onClick={() => setDeleteTarget(plan)}
+                            onClick={() => setDeleteTarget(subject)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-error-50 hover:text-error-500 dark:text-gray-400 dark:hover:bg-error-500/10"
-                            aria-label={`Eliminar ${plan.code}`}
+                            aria-label={`Eliminar ${subject.name}`}
                             title="Eliminar"
                           >
                             <TrashBinIcon className="size-4" />
@@ -398,7 +469,7 @@ export default function Planes() {
       >
         <div className="p-6 sm:p-8">
           <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
-            {editing ? "Editar plan" : "Nuevo plan de estudio"}
+            {editing ? "Editar materia" : "Nueva materia"}
           </h3>
 
           {formError && (
@@ -408,9 +479,9 @@ export default function Planes() {
           )}
 
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="plan-university">Universidad</Label>
+                <Label htmlFor="subject-university">Universidad</Label>
                 <Combobox
                   placeholder="Busca o selecciona una universidad"
                   value={form.university}
@@ -421,12 +492,14 @@ export default function Planes() {
                       university: value,
                       academic_unit: 0,
                       career: 0,
+                      study_plan: 0,
+                      study_area: 0,
                     })
                   }
                 />
               </div>
               <div>
-                <Label htmlFor="plan-unit">Unidad académica</Label>
+                <Label htmlFor="subject-unit">Unidad académica</Label>
                 <Combobox
                   placeholder={
                     form.university
@@ -436,12 +509,20 @@ export default function Planes() {
                   value={form.academic_unit}
                   options={academicUnitOptions}
                   onChange={(value) =>
-                    setForm({ ...form, academic_unit: value, career: 0 })
+                    setForm({
+                      ...form,
+                      academic_unit: value,
+                      career: 0,
+                      study_plan: 0,
+                      study_area: 0,
+                    })
                   }
                 />
               </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="plan-career">Carrera</Label>
+                <Label htmlFor="subject-career">Carrera</Label>
                 <Combobox
                   placeholder={
                     form.academic_unit
@@ -451,73 +532,116 @@ export default function Planes() {
                   value={form.career}
                   options={careerOptions}
                   onChange={(value) =>
-                    setForm({ ...form, career: value })
+                    setForm({
+                      ...form,
+                      career: value,
+                      study_plan: 0,
+                      study_area: 0,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="subject-plan">Plan de estudios</Label>
+                <Combobox
+                  placeholder={
+                    form.career
+                      ? "Busca o selecciona un plan de estudios"
+                      : "Primero elige la carrera"
+                  }
+                  value={form.study_plan}
+                  options={planOptions}
+                  onChange={(value) =>
+                    setForm({
+                      ...form,
+                      study_plan: value,
+                      study_area: 0,
+                    })
                   }
                 />
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="plan-code">Código del plan</Label>
+                <Label htmlFor="subject-area">Área</Label>
+                <Combobox
+                  placeholder={
+                    form.study_plan
+                      ? "Busca o selecciona un área"
+                      : "Primero elige el plan de estudios"
+                  }
+                  value={form.study_area}
+                  options={areaOptions}
+                  onChange={(value) => setForm({ ...form, study_area: value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="subject-code">Código de la materia</Label>
                 <Input
-                  id="plan-code"
-                  placeholder="Ej. PLAN-2010"
+                  id="subject-code"
+                  placeholder="Ej. MAT-101"
                   value={form.code}
                   onChange={(e) => setForm({ ...form, code: e.target.value })}
                 />
               </div>
-              <div>
-                <Label htmlFor="plan-title">Título que otorga</Label>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="sm:col-span-1">
+                <Label htmlFor="subject-name">Nombre de la materia</Label>
                 <Input
-                  id="plan-title"
-                  placeholder="Ej. Ingeniero en Informática"
-                  value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  id="subject-name"
+                  placeholder="Ej. Álgebra Lineal"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
               </div>
               <div>
-                <Label htmlFor="plan-intermediate-title">
-                  Título intermedio
-                </Label>
+                <Label htmlFor="subject-year">Año de dictado</Label>
                 <Input
-                  id="plan-intermediate-title"
-                  placeholder="Ej. Técnico Universitario en Informática (opcional)"
-                  value={form.intermediate_title}
-                  onChange={(e) =>
-                    setForm({ ...form, intermediate_title: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="plan-duration">Duración (años)</Label>
-                <Input
-                  id="plan-duration"
+                  id="subject-year"
                   type="number"
                   min="1"
-                  max="10"
-                  placeholder="Ej. 5"
-                  value={String(form.duration_years)}
+                  max={planDuration ? String(planDuration) : undefined}
+                  placeholder={planDuration ? `1 a ${planDuration}` : "Año"}
+                  value={String(form.year)}
                   onChange={(e) =>
-                    setForm({
-                      ...form,
-                      duration_years: Number(e.target.value) || 0,
-                    })
+                    setForm({ ...form, year: Number(e.target.value) || 0 })
                   }
                 />
+                {planDuration > 0 && (
+                  <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    El plan dura {planDuration}{" "}
+                    {planDuration === 1 ? "año" : "años"}.
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="subject-period">Período</Label>
+                <select
+                  id="subject-period"
+                  value={form.period}
+                  onChange={(e) => setForm({ ...form, period: e.target.value })}
+                  className="h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                >
+                  {PERIOD_OPTIONS.map((p) => (
+                    <option
+                      key={p.value}
+                      value={p.value}
+                      className="bg-white text-gray-800 dark:bg-gray-900 dark:text-white/90"
+                    >
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
 
-          <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:gap-10">
+          <div className="mt-5">
             <Switch
-              label="Activo"
+              label="Activa"
               defaultChecked={form.is_active}
               onChange={(checked) => setForm({ ...form, is_active: checked })}
-            />
-            <Switch
-              label="Vigente"
-              defaultChecked={form.is_current}
-              onChange={(checked) => setForm({ ...form, is_current: checked })}
             />
           </div>
 
@@ -534,7 +658,7 @@ export default function Planes() {
                 ? "Guardando…"
                 : editing
                   ? "Guardar cambios"
-                  : "Crear plan"}
+                  : "Crear materia"}
             </Button>
           </div>
         </div>
@@ -551,12 +675,12 @@ export default function Planes() {
             <TrashBinIcon className="size-5" />
           </div>
           <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-            Eliminar plan de estudio
+            Eliminar materia
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            ¿Estás seguro de eliminar el plan{" "}
+            ¿Estás seguro de eliminar la materia{" "}
             <span className="font-medium text-gray-700 dark:text-gray-300">
-              {deleteTarget?.code}
+              {deleteTarget?.name}
             </span>
             ? Esta acción no se puede deshacer.
           </p>

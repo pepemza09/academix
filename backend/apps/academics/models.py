@@ -92,6 +92,7 @@ class StudyPlan(models.Model):
     code = models.CharField(max_length=30)
     title = models.CharField(max_length=255)
     intermediate_title = models.CharField(max_length=255, blank=True)
+    duration_years = models.PositiveSmallIntegerField(default=5)
     is_active = models.BooleanField(default=True)
     is_current = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -126,3 +127,38 @@ class StudyArea(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+class Subject(models.Model):
+    class Period(models.TextChoices):
+        FIRST_QUARTER = "1Q", "1er Cuatrimestre"
+        SECOND_QUARTER = "2Q", "2do Cuatrimestre"
+        FIRST_BIMESTER = "1B", "1er Bimestre"
+        SECOND_BIMESTER = "2B", "2do Bimestre"
+        THIRD_BIMESTER = "3B", "3er Bimestre"
+        FOURTH_BIMESTER = "4B", "4to Bimestre"
+        ANNUAL = "AN", "Anual"
+
+    study_area = models.ForeignKey(
+        StudyArea, on_delete=models.CASCADE, related_name="subjects"
+    )
+    code = models.CharField(max_length=30)
+    name = models.CharField(max_length=255)
+    year = models.PositiveSmallIntegerField()
+    period = models.CharField(max_length=2, choices=Period.choices)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["study_area", "code"],
+                name="unique_subject_code_per_area",
+            )
+        ]
+        indexes = [models.Index(fields=["study_area", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"{self.code} - {self.name}"

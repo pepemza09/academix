@@ -19,6 +19,7 @@ const Sede = lazy(() => import("./pages/Institucional/Sede"));
 const Carreras = lazy(() => import("./pages/Academica/Carreras"));
 const Planes = lazy(() => import("./pages/Academica/Planes"));
 const Areas = lazy(() => import("./pages/Academica/Areas"));
+const Materias = lazy(() => import("./pages/Academica/Materias"));
 
 const fallback = (
   <div className="flex min-h-screen items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -55,6 +56,7 @@ export default function App() {
               <Route path="/academica/carreras" element={<Carreras />} />
               <Route path="/academica/planes" element={<Planes />} />
               <Route path="/academica/areas" element={<Areas />} />
+              <Route path="/academica/materias" element={<Materias />} />
 
               {/* Perfil y utilidades */}
               <Route path="/profile" element={<UserProfiles />} />
