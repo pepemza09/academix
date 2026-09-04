@@ -15,6 +15,7 @@ from apps.academics.models import (
     AcademicUnit,
     Campus,
     Career,
+    Nomenclador,
     StudyArea,
     StudyPlan,
     Subject,
@@ -242,6 +243,23 @@ class StudyAreaSerializer(serializers.ModelSerializer):
             "is_active",
         ]
 
+    def validate(self, attrs):
+        name = attrs.get("name", getattr(self.instance, "name", None))
+        study_plan = attrs.get(
+            "study_plan", getattr(self.instance, "study_plan", None)
+        )
+        if name and study_plan:
+            qs = StudyArea.objects.filter(
+                study_plan=study_plan, name=name
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {"name": "Ya existe un área con ese nombre en el plan de estudios."}
+                )
+        return attrs
+
 
 class StudyAreaViewSet(viewsets.ModelViewSet):
     queryset = StudyArea.objects.select_related("study_plan__career").all()
@@ -282,6 +300,16 @@ class SubjectSerializer(serializers.ModelSerializer):
     duration_years = serializers.IntegerField(
         source="study_area.study_plan.duration_years", read_only=True
     )
+    nomenclador_label = serializers.SerializerMethodField()
+
+    def get_nomenclador_label(self, obj):
+        if not obj.nomenclador_id:
+            return None
+        n = obj.nomenclador
+        base = f"{n.discipline} / {n.subdiscipline} / {n.specialty}"
+        if obj.nomenclador_extra:
+            return f"{base} ({obj.nomenclador_extra})"
+        return base
 
     class Meta:
         model = Subject
@@ -299,6 +327,9 @@ class SubjectSerializer(serializers.ModelSerializer):
             "career_name",
             "career_code",
             "duration_years",
+            "nomenclador",
+            "nomenclador_extra",
+            "nomenclador_label",
             "is_active",
         ]
 
@@ -318,10 +349,59 @@ class SubjectSerializer(serializers.ModelSerializer):
 
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.select_related(
-        "study_area__study_plan__career"
+        "study_area__study_plan__career", "nomenclador"
     ).all()
     serializer_class = SubjectSerializer
     permission_classes = [IsAuthenticated]
+
+
+class NomencladorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Nomenclador
+        fields = [
+            "id",
+            "discipline",
+            "subdiscipline",
+            "specialty",
+            "is_active",
+        ]
+
+    def validate(self, attrs):
+        combo = (
+            attrs.get("discipline", getattr(self.instance, "discipline", None)),
+            attrs.get("subdiscipline", getattr(self.instance, "subdiscipline", None)),
+            attrs.get("specialty", getattr(self.instance, "specialty", None)),
+        )
+        if all(combo):
+            qs = Nomenclador.objects.filter(
+                discipline=combo[0],
+                subdiscipline=combo[1],
+                specialty=combo[2],
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    "Ya existe un nomenclador con esa disciplina, subdisciplina y especialidad."
+                )
+        return attrs
+
+
+class NomencladorViewSet(viewsets.ModelViewSet):
+    queryset = Nomenclador.objects.all()
+    serializer_class = NomencladorSerializer
+    permission_classes = [IsAuthenticated]
+
+    def destroy(self, request, *args, **kwargs):
+        nomenclador = self.get_object()
+        if nomenclador.subjects.exists():
+            return Response(
+                {
+                    "detail": "No se puede eliminar un nomenclador que está asociado a materias."
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 router = DefaultRouter()
@@ -332,6 +412,7 @@ router.register("careers", CareerViewSet, basename="career")
 router.register("study-plans", StudyPlanViewSet, basename="study-plan")
 router.register("study-areas", StudyAreaViewSet, basename="study-area")
 router.register("subjects", SubjectViewSet, basename="subject")
+router.register("nomencladores", NomencladorViewSet, basename="nomenclador")
 
 
 @require_http_methods(["GET"])

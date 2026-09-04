@@ -20,12 +20,19 @@ import { StudyPlan, studyPlanApi } from "../../api/studyPlans";
 import { Career, careerApi } from "../../api/careers";
 import { AcademicUnit, academicUnitApi } from "../../api/academicUnits";
 import { University, universityApi } from "../../api/universities";
+import {
+  Nomenclador,
+  nomencladorApi,
+  nomencladorLabel,
+} from "../../api/nomencladores";
 
 type SubjectForm = SubjectPayload & {
   university: number;
   academic_unit: number;
   career: number;
   study_plan: number;
+  nomenclador: number;
+  nomenclador_extra: string;
 };
 
 const EMPTY_FORM: SubjectForm = {
@@ -39,6 +46,8 @@ const EMPTY_FORM: SubjectForm = {
   academic_unit: 0,
   career: 0,
   study_plan: 0,
+  nomenclador: 0,
+  nomenclador_extra: "",
 };
 
 export default function Materias() {
@@ -48,6 +57,7 @@ export default function Materias() {
   const [careers, setCareers] = useState<Career[]>([]);
   const [academicUnits, setAcademicUnits] = useState<AcademicUnit[]>([]);
   const [universities, setUniversities] = useState<University[]>([]);
+  const [nomencladores, setNomencladores] = useState<Nomenclador[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +84,7 @@ export default function Materias() {
         careersData,
         unitsData,
         universitiesData,
+        nomencladoresData,
       ] = await Promise.all([
         subjectApi.list(),
         studyAreaApi.list(),
@@ -81,6 +92,7 @@ export default function Materias() {
         careerApi.list(),
         academicUnitApi.list(),
         universityApi.list(),
+        nomencladorApi.list(),
       ]);
       setSubjects(subjectsData);
       setAreas(areasData);
@@ -88,6 +100,7 @@ export default function Materias() {
       setCareers(careersData);
       setAcademicUnits(unitsData);
       setUniversities(universitiesData);
+      setNomencladores(nomencladoresData);
     } catch (e) {
       setError(
         e instanceof Error
@@ -149,6 +162,19 @@ export default function Materias() {
     label: a.name,
   }));
 
+  const nomencladorOptions = nomencladores
+    .filter((n) => n.is_active)
+    .map((n) => ({
+      value: n.id,
+      label: nomencladorLabel(n),
+    }));
+
+  const selectedNomenclador = form.nomenclador
+    ? nomencladores.find((n) => n.id === form.nomenclador)
+    : undefined;
+  const showNomencladorExtra =
+    !!selectedNomenclador && selectedNomenclador.specialty.trim().startsWith("99");
+
   const filteredSubjects = subjects.filter((subject) => {
     const term = search.trim().toLowerCase();
     const matchesSearch =
@@ -157,7 +183,9 @@ export default function Materias() {
       subject.name.toLowerCase().includes(term) ||
       subject.career_name.toLowerCase().includes(term) ||
       subject.career_code.toLowerCase().includes(term) ||
-      subject.study_area_name.toLowerCase().includes(term);
+      subject.study_area_name.toLowerCase().includes(term) ||
+      (subject.nomenclador_label &&
+        subject.nomenclador_label.toLowerCase().includes(term));
     const matchesStatus =
       statusFilter === "all" ||
       (statusFilter === "active" && subject.is_active) ||
@@ -195,6 +223,8 @@ export default function Materias() {
       academic_unit: career ? career.academic_unit : 0,
       career: plan ? plan.career : 0,
       study_plan: area ? area.study_plan : 0,
+      nomenclador: subject.nomenclador || 0,
+      nomenclador_extra: subject.nomenclador_extra || "",
     });
     setFormError(null);
     setModalOpen(true);
@@ -382,6 +412,7 @@ export default function Materias() {
                     <th className="px-5 py-3">Año</th>
                     <th className="px-5 py-3">Período</th>
                     <th className="px-5 py-3">Área</th>
+                    <th className="px-5 py-3">Nomenclador</th>
                     <th className="px-5 py-3">Plan</th>
                     <th className="px-5 py-3">Carrera</th>
                     <th className="px-5 py-3">Activa</th>
@@ -408,6 +439,20 @@ export default function Materias() {
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
                         {subject.study_area_name}
+                      </td>
+                      <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
+                        {subject.nomenclador_label ? (
+                          <span
+                            className="inline-block max-w-[220px] truncate align-middle"
+                            title={subject.nomenclador_label}
+                          >
+                            {subject.nomenclador_label}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">
+                            —
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
                         <div className="font-medium text-gray-800 dark:text-white">
@@ -635,6 +680,45 @@ export default function Materias() {
                 </select>
               </div>
             </div>
+
+            <div>
+              <Label htmlFor="subject-nomenclador">Nomenclador (Opcional)</Label>
+              <Combobox
+                placeholder="Busca o selecciona un nomenclador..."
+                value={form.nomenclador || 0}
+                options={nomencladorOptions}
+                onChange={(value) =>
+                  setForm({ ...form, nomenclador: value || 0, nomenclador_extra: "" })
+                }
+              />
+            </div>
+
+            {showNomencladorExtra && (
+              <div>
+                <Label htmlFor="subject-nomenclador-extra">
+                  Detalle de especialidad (paréntesis)
+                </Label>
+                <Input
+                  id="subject-nomenclador-extra"
+                  placeholder="Ej. Derecho Público"
+                  value={form.nomenclador_extra}
+                  onChange={(e) =>
+                    setForm({ ...form, nomenclador_extra: e.target.value })
+                  }
+                />
+                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  Se mostrará como parte del nomenclador:{" "}
+                  <span className="font-medium text-gray-600 dark:text-gray-300">
+                    {selectedNomenclador
+                      ? `${selectedNomenclador.discipline} / ${selectedNomenclador.subdiscipline} / ${selectedNomenclador.specialty}`
+                      : ""}
+                    {form.nomenclador_extra
+                      ? ` (${form.nomenclador_extra})`
+                      : ""}
+                  </span>
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="mt-5">

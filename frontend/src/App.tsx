@@ -20,6 +20,10 @@ const Carreras = lazy(() => import("./pages/Academica/Carreras"));
 const Planes = lazy(() => import("./pages/Academica/Planes"));
 const Areas = lazy(() => import("./pages/Academica/Areas"));
 const Materias = lazy(() => import("./pages/Academica/Materias"));
+const Nomenclador = lazy(() => import("./pages/Configuraciones/Nomenclador"));
+const Configuraciones = lazy(
+  () => import("./pages/Configuraciones/Index"),
+);
 
 const fallback = (
   <div className="flex min-h-screen items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -61,6 +65,10 @@ export default function App() {
               {/* Perfil y utilidades */}
               <Route path="/profile" element={<UserProfiles />} />
               <Route path="/calendar" element={<Calendar />} />
+
+              {/* Configuraciones */}
+              <Route path="/configuraciones" element={<Configuraciones />} />
+              <Route path="/configuraciones/nomenclador" element={<Nomenclador />} />
             </Route>
 
             {/* Auth Layout */}

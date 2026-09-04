@@ -24,6 +24,9 @@ export interface Subject {
   career_name: string;
   career_code: string;
   duration_years: number;
+  nomenclador?: number | null;
+  nomenclador_extra?: string;
+  nomenclador_label?: string | null;
   is_active: boolean;
 }
 
@@ -33,6 +36,8 @@ export interface SubjectPayload {
   year: number;
   period: string;
   study_area: number;
+  nomenclador?: number | null;
+  nomenclador_extra?: string;
   is_active: boolean;
 }
 

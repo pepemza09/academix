@@ -123,6 +123,12 @@ class StudyArea(models.Model):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["study_plan", "name"],
+                name="unique_area_name_per_plan",
+            )
+        ]
         indexes = [models.Index(fields=["study_plan", "is_active"])]
 
     def __str__(self) -> str:
@@ -142,6 +148,14 @@ class Subject(models.Model):
     study_area = models.ForeignKey(
         StudyArea, on_delete=models.CASCADE, related_name="subjects"
     )
+    nomenclador = models.ForeignKey(
+        "Nomenclador",
+        on_delete=models.PROTECT,
+        related_name="subjects",
+        null=True,
+        blank=True,
+    )
+    nomenclador_extra = models.CharField(max_length=255, blank=True)
     code = models.CharField(max_length=30)
     name = models.CharField(max_length=255)
     year = models.PositiveSmallIntegerField()
@@ -162,3 +176,24 @@ class Subject(models.Model):
 
     def __str__(self) -> str:
         return f"{self.code} - {self.name}"
+
+
+class Nomenclador(models.Model):
+    discipline = models.CharField(max_length=120)
+    subdiscipline = models.CharField(max_length=120)
+    specialty = models.CharField(max_length=160)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["discipline", "subdiscipline", "specialty"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["discipline", "subdiscipline", "specialty"],
+                name="unique_nomenclador_combo",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.discipline} / {self.subdiscipline} / {self.specialty}"
