@@ -513,6 +513,34 @@ class DeleteProtectionApiTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("year", resp.data)
 
+    def test_subject_code_must_be_globally_unique(self):
+        _, _, plan, area = self.create_hierarchy()
+        area2 = StudyArea.objects.create(
+            name="Otra Área", study_plan=plan
+        )
+        Subject.objects.create(
+            code="UNICO-001",
+            name="Primera",
+            study_area=area,
+            year=1,
+            period="1Q",
+        )
+        resp = self.client.post(
+            reverse("subject-list"),
+            {
+                "code": "UNICO-001",
+                "name": "Segunda en otra área",
+                "study_area": area2.id,
+                "year": 1,
+                "period": "1Q",
+                "is_active": True,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("code", resp.data)
+        self.assertEqual(Subject.objects.filter(code="UNICO-001").count(), 1)
+
 
 class BackupRestoreRoundTripTests(TestCase):
     """El backup con natural keys restaura todo el circuito jerárquico."""

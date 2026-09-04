@@ -156,7 +156,7 @@ class Subject(models.Model):
         blank=True,
     )
     nomenclador_extra = models.CharField(max_length=255, blank=True)
-    code = models.CharField(max_length=30)
+    code = models.CharField(max_length=30, unique=True)
     name = models.CharField(max_length=255)
     year = models.PositiveSmallIntegerField()
     period = models.CharField(max_length=2, choices=Period.choices)
@@ -165,13 +165,7 @@ class Subject(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["name"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["study_area", "code"],
-                name="unique_subject_code_per_area",
-            )
-        ]
+        ordering = ["code"]
         indexes = [models.Index(fields=["study_area", "is_active"])]
 
     def __str__(self) -> str:

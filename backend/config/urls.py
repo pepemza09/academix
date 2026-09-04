@@ -344,6 +344,12 @@ class SubjectSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"year": f"El año debe estar entre 1 y {duration} (duración del plan)."}
                 )
+
+        code = attrs.get("code", getattr(self.instance, "code", None))
+        if code and Subject.objects.filter(code=code).exclude(pk=self.instance.pk if self.instance else None).exists():
+            raise serializers.ValidationError(
+                {"code": "Ya existe una materia con ese código."}
+            )
         return attrs
 
 
