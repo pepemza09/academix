@@ -40,6 +40,30 @@ En producción hay que configurar HTTPS, dominios permitidos, credenciales OAuth
 
 Todos los secretos, usuarios, contraseñas, tokens y URLs de conexión se leen desde `.env`. El archivo `.env` está excluido por Git; solo `.env.example` se versiona con placeholders. Nunca introduzcas credenciales en código, logs, commits o imágenes Docker.
 
+## Backup y restauración de datos
+
+Los datos de negocio (universidades, unidades, sedes, carreras, planes, áreas, materias y nomencladores) se respaldan como JSON en `./backup` con *natural keys*: cada registro se identifica por sus códigos/combinaciones únicas, no por su `id`, de modo que la restauración funciona aunque la estructura de la base haya cambiado (campos agregados/quitados, IDs nuevos).
+
+```bash
+# Backups
+./scripts/backup.sh                                    # respalda en ./backup/academix_backup_<fecha>.json
+./scripts/backup.sh --output=./backup/mi-backup.json   # nombre/ruta personalizado
+
+# Restauración (fusiona por natural key: actualiza lo existente, crea lo nuevo)
+./scripts/restore.sh                                   # usa el backup más reciente de ./backup
+./scripts/restore.sh --input=./backup/mi-backup.json   # un archivo específico
+./scripts/restore.sh --yes                             # sin confirmación (útil en scripts)
+```
+
+Los dos scripts envuelven comandos de Django, equivalentes a:
+
+```bash
+docker compose exec backend python manage.py backup_data
+docker compose exec backend python manage.py restore_data --yes
+```
+
+La restauración tolera cambios de esquema: solo aplica los campos presentes tanto en el JSON como en el modelo actual; los campos nuevos quedan con su valor por defecto y los modelos eliminados se ignoran. Los backups (`.json`) no se versionan en Git; la carpeta `./backup` está montada en el contenedor `backend`.
+
 ## Desarrollo asistido por IA
 
 Las reglas globales están en [.github/AGENTS.md](.github/AGENTS.md). Los subagentes especializados están en [.github/agents/academix-backend.agent.md](.github/agents/academix-backend.agent.md) y [.github/agents/academix-frontend.agent.md](.github/agents/academix-frontend.agent.md). Ambos deben cargar los skills locales indicados antes de trabajar.

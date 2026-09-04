@@ -1,4 +1,8 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -6,6 +10,7 @@ from .models import (
     AcademicUnit,
     Campus,
     Career,
+    Nomenclador,
     StudyArea,
     StudyPlan,
     Subject,
@@ -507,3 +512,112 @@ class DeleteProtectionApiTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("year", resp.data)
+
+
+class BackupRestoreRoundTripTests(TestCase):
+    """El backup con natural keys restaura todo el circuito jerárquico."""
+
+    def create_hierarchy(self):
+        uni = University.objects.create(name="Universidad de Prueba")
+        unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Ing.",
+            name="Facultad de Ingeniería",
+            university=uni,
+        )
+        campus1 = Campus.objects.create(
+            code="SED-01", name="Sede Centro", academic_unit=unit
+        )
+        campus2 = Campus.objects.create(
+            code="SED-02", name="Sede Norte", academic_unit=unit
+        )
+        career = Career.objects.create(
+            code="ING-01",
+            short_name="Ing. Inf.",
+            name="Ingeniería en Informática",
+            academic_unit=unit,
+        )
+        career.campuses.add(campus1, campus2)
+        plan = StudyPlan.objects.create(
+            code="PLAN-2010",
+            title="Ingeniero en Informática",
+            career=career,
+            duration_years=5,
+            is_current=True,
+        )
+        area = StudyArea.objects.create(
+            name="Ciencias Básicas", study_plan=plan
+        )
+        nomen = Nomenclador.objects.create(
+            discipline="1 - Ciencias Naturales y Exactas",
+            subdiscipline="07 - Matemática",
+            specialty="03 - Estadística",
+        )
+        subject = Subject.objects.create(
+            code="MAT-101",
+            name="Estadística I",
+            study_area=area,
+            year=1,
+            period="2Q",
+            nomenclador=nomen,
+            nomenclador_extra="Aplicada",
+        )
+        return nomen, subject
+
+    def wipe_domain(self):
+        Subject.objects.all().delete()
+        StudyArea.objects.all().delete()
+        StudyPlan.objects.all().delete()
+        Career.objects.all().delete()
+        Campus.objects.all().delete()
+        AcademicUnit.objects.all().delete()
+        University.objects.all().delete()
+        Nomenclador.objects.all().delete()
+
+    def test_roundtrip_restores_full_hierarchy(self):
+        original_nomen, _ = self.create_hierarchy()
+
+        with TemporaryDirectory() as tmp:
+            out = Path(tmp) / "backup.json"
+            call_command("backup_data", output=str(out))
+            self.assertTrue(out.is_file())
+
+            self.wipe_domain()
+            self.assertEqual(University.objects.count(), 0)
+
+            call_command("restore_data", input=str(out), yes=True)
+
+        self.assertEqual(Nomenclador.objects.count(), 1)
+        self.assertEqual(University.objects.count(), 1)
+        self.assertEqual(AcademicUnit.objects.count(), 1)
+        self.assertEqual(Campus.objects.count(), 2)
+        self.assertEqual(Career.objects.count(), 1)
+        self.assertEqual(Career.objects.get(code="ING-01").campuses.count(), 2)
+        self.assertEqual(StudyPlan.objects.count(), 1)
+        self.assertEqual(StudyArea.objects.count(), 1)
+        self.assertEqual(Subject.objects.count(), 1)
+
+        subject = Subject.objects.get(code="MAT-101")
+        self.assertEqual(subject.study_area.name, "Ciencias Básicas")
+        self.assertEqual(subject.study_area.study_plan.career.code, "ING-01")
+        self.assertEqual(subject.year, 1)
+        self.assertEqual(subject.period, "2Q")
+        self.assertEqual(subject.nomenclador.discipline, original_nomen.discipline)
+        self.assertEqual(subject.nomenclador.subdiscipline, original_nomen.subdiscipline)
+        self.assertEqual(subject.nomenclador.specialty, original_nomen.specialty)
+        self.assertEqual(subject.nomenclador_extra, "Aplicada")
+
+    def test_restore_is_idempotent(self):
+        self.create_hierarchy()
+        with TemporaryDirectory() as tmp:
+            out = Path(tmp) / "backup.json"
+            call_command("backup_data", output=str(out))
+
+            call_command("restore_data", input=str(out), yes=True)
+            call_command("restore_data", input=str(out), yes=True)
+
+        self.assertEqual(University.objects.count(), 1)
+        self.assertEqual(AcademicUnit.objects.count(), 1)
+        self.assertEqual(Career.objects.count(), 1)
+        self.assertEqual(Subject.objects.count(), 1)
+        self.assertEqual(Career.objects.get(code="ING-01").campuses.count(), 2)

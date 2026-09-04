@@ -224,3 +224,7 @@ template/
 # Academix: archivos subidos por usuarios (avatares, etc.) no se versionan
 backend/media/
 
+# Academix: backups de datos de negocio (JSON) no se versionan
+backup/*
+!backup/.gitkeep
+
