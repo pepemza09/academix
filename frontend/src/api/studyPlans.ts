@@ -24,7 +24,8 @@ export interface StudyPlanPayload {
 }
 
 export const studyPlanApi = {
-  list: () => api.get<StudyPlan[]>("/study-plans/"),
+  list: (signal?: AbortSignal) =>
+    api.get<StudyPlan[]>("/study-plans/", signal),
   create: (data: StudyPlanPayload) => api.post<StudyPlan>("/study-plans/", data),
   update: (id: number, data: StudyPlanPayload) =>
     api.patch<StudyPlan>(`/study-plans/${id}/`, data),

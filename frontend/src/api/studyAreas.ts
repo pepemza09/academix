@@ -18,7 +18,8 @@ export interface StudyAreaPayload {
 }
 
 export const studyAreaApi = {
-  list: () => api.get<StudyArea[]>("/study-areas/"),
+  list: (signal?: AbortSignal) =>
+    api.get<StudyArea[]>("/study-areas/", signal),
   create: (data: StudyAreaPayload) => api.post<StudyArea>("/study-areas/", data),
   update: (id: number, data: StudyAreaPayload) =>
     api.patch<StudyArea>(`/study-areas/${id}/`, data),

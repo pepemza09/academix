@@ -59,17 +59,18 @@ export default function UnidadAcademica() {
     return matchesSearch && matchesStatus;
   });
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
       const [unitsData, universitiesData] = await Promise.all([
-        academicUnitApi.list(),
-        universityApi.list(),
+        academicUnitApi.list(signal),
+        universityApi.list(signal),
       ]);
       setUnits(unitsData);
       setUniversities(universitiesData);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(
         e instanceof Error
           ? e.message
@@ -81,7 +82,9 @@ export default function UnidadAcademica() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
 
   const universityOptions = universities.map((u) => ({

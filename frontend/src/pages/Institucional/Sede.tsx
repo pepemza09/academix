@@ -40,17 +40,18 @@ export default function Sede() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
       const [campusesData, unitsData] = await Promise.all([
-        campusApi.list(),
-        academicUnitApi.list(),
+        campusApi.list(signal),
+        academicUnitApi.list(signal),
       ]);
       setCampuses(campusesData);
       setAcademicUnits(unitsData);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(
         e instanceof Error
           ? e.message
@@ -62,7 +63,9 @@ export default function Sede() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
 
   const academicUnitOptions = academicUnits.map((u) => ({

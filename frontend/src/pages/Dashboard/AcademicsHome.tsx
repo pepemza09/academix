@@ -8,13 +8,14 @@ export default function AcademicsHome() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchUnits = useCallback(async () => {
+  const fetchUnits = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await academicUnitApi.list();
+      const data = await academicUnitApi.list(signal);
       setUnits(data);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(
         e instanceof Error
           ? e.message
@@ -26,7 +27,9 @@ export default function AcademicsHome() {
   }, []);
 
   useEffect(() => {
-    fetchUnits();
+    const controller = new AbortController();
+    fetchUnits(controller.signal);
+    return () => controller.abort();
   }, [fetchUnits]);
 
   const activeCount = units.filter((u) => u.is_active).length;

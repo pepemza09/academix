@@ -23,7 +23,7 @@ export interface CareerPayload {
 }
 
 export const careerApi = {
-  list: () => api.get<Career[]>("/careers/"),
+  list: (signal?: AbortSignal) => api.get<Career[]>("/careers/", signal),
   create: (data: CareerPayload) => api.post<Career>("/careers/", data),
   update: (id: number, data: CareerPayload) =>
     api.patch<Career>(`/careers/${id}/`, data),

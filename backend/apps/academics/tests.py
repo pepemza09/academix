@@ -649,3 +649,86 @@ class BackupRestoreRoundTripTests(TestCase):
         self.assertEqual(Career.objects.count(), 1)
         self.assertEqual(Subject.objects.count(), 1)
         self.assertEqual(Career.objects.get(code="ING-01").campuses.count(), 2)
+
+
+class FormOptionsEndpointTests(TestCase):
+    """Verifica que /api/form-options/ devuelva las opciones de formulario,
+    incluida la lista de materias, y los contadores anotados."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            username="tester", password="testpass"
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(username="tester", password="testpass")
+        self.university = University.objects.create(
+            name="Universidad de Prueba"
+        )
+        self.unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Tecnología",
+            name="Facultad de Tecnología",
+            university=self.university,
+        )
+        campus = Campus.objects.create(
+            code="SED-01", name="Sede Centro", academic_unit=self.unit
+        )
+        career = Career.objects.create(
+            code="ING-01",
+            short_name="Ing.",
+            name="Ingeniería",
+            academic_unit=self.unit,
+        )
+        career.campuses.add(campus)
+        plan = StudyPlan.objects.create(
+            code="PLAN-2010", title="Ingeniero", career=career
+        )
+        area = StudyArea.objects.create(
+            name="Ciencias Básicas", study_plan=plan
+        )
+        Subject.objects.create(
+            code="MAT-101",
+            name="Álgebra Lineal",
+            study_area=area,
+            year=1,
+            period="1Q",
+        )
+
+    def test_form_options_includes_all_entities(self):
+        resp = self.client.get("/api/form-options/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        expected_keys = {
+            "universities",
+            "academic_units",
+            "campuses",
+            "careers",
+            "study_plans",
+            "study_areas",
+            "subjects",
+            "nomencladores",
+        }
+        self.assertTrue(expected_keys.issubset(data.keys()))
+
+    def test_form_options_includes_subjects(self):
+        resp = self.client.get("/api/form-options/")
+        self.assertEqual(resp.status_code, 200)
+        subjects = resp.json()["subjects"]
+        self.assertEqual(len(subjects), 1)
+        subject = subjects[0]
+        self.assertEqual(subject["code"], "MAT-101")
+        self.assertEqual(subject["study_area_name"], "Ciencias Básicas")
+        self.assertEqual(subject["study_plan_code"], "PLAN-2010")
+        self.assertEqual(subject["career_code"], "ING-01")
+        self.assertEqual(subject["period_label"], "1er Cuatrimestre")
+
+    def test_form_options_annotates_counts(self):
+        resp = self.client.get("/api/form-options/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["universities"][0]["academic_unit_count"], 1)
+        self.assertEqual(data["academic_units"][0]["campus_count"], 1)
+        self.assertEqual(data["careers"][0]["campus_count"], 1)

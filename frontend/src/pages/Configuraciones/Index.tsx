@@ -11,11 +11,16 @@ export default function ConfiguracionesIndex() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     nomencladorApi
-      .list()
+      .list(controller.signal)
       .then((data) => setNomencladorCount(data.length))
-      .catch(() => setNomencladorCount(null))
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setNomencladorCount(null);
+      })
       .finally(() => setLoading(false));
+    return () => controller.abort();
   }, []);
 
   return (

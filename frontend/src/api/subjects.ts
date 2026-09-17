@@ -42,7 +42,7 @@ export interface SubjectPayload {
 }
 
 export const subjectApi = {
-  list: () => api.get<Subject[]>("/subjects/"),
+  list: (signal?: AbortSignal) => api.get<Subject[]>("/subjects/", signal),
   create: (data: SubjectPayload) => api.post<Subject>("/subjects/", data),
   update: (id: number, data: SubjectPayload) =>
     api.patch<Subject>(`/subjects/${id}/`, data),

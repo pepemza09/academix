@@ -41,13 +41,14 @@ export default function NomencladorPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await nomencladorApi.list();
+      const data = await nomencladorApi.list(signal);
       setNomencladores(data);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(
         e instanceof Error
           ? e.message
@@ -59,7 +60,9 @@ export default function NomencladorPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
 
   const filteredNomencladores = nomencladores.filter((n) => {

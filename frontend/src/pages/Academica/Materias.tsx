@@ -15,16 +15,13 @@ import {
   SubjectPayload,
   subjectApi,
 } from "../../api/subjects";
-import { StudyArea, studyAreaApi } from "../../api/studyAreas";
-import { StudyPlan, studyPlanApi } from "../../api/studyPlans";
-import { Career, careerApi } from "../../api/careers";
-import { AcademicUnit, academicUnitApi } from "../../api/academicUnits";
-import { University, universityApi } from "../../api/universities";
-import {
-  Nomenclador,
-  nomencladorApi,
-  nomencladorLabel,
-} from "../../api/nomencladores";
+import { StudyArea } from "../../api/studyAreas";
+import { StudyPlan } from "../../api/studyPlans";
+import { Career } from "../../api/careers";
+import { AcademicUnit } from "../../api/academicUnits";
+import { University } from "../../api/universities";
+import { Nomenclador, nomencladorLabel } from "../../api/nomencladores";
+import { formOptionsApi } from "../../api/formOptions";
 
 type SubjectForm = SubjectPayload & {
   university: number;
@@ -73,39 +70,22 @@ export default function Materias() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const [
-        subjectsData,
-        areasData,
-        plansData,
-        careersData,
-        unitsData,
-        universitiesData,
-        nomencladoresData,
-      ] = await Promise.all([
-        subjectApi.list(),
-        studyAreaApi.list(),
-        studyPlanApi.list(),
-        careerApi.list(),
-        academicUnitApi.list(),
-        universityApi.list(),
-        nomencladorApi.list(),
-      ]);
-      setSubjects(subjectsData);
-      setAreas(areasData);
-      setPlans(plansData);
-      setCareers(careersData);
-      setAcademicUnits(unitsData);
-      setUniversities(universitiesData);
-      setNomencladores(nomencladoresData);
+      const options = await formOptionsApi.list(signal);
+      setSubjects(options.subjects);
+      setAreas(options.study_areas);
+      setPlans(options.study_plans);
+      setCareers(options.careers);
+      setAcademicUnits(options.academic_units);
+      setUniversities(options.universities);
+      setNomencladores(options.nomencladores);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(
-        e instanceof Error
-          ? e.message
-          : "No se pudieron cargar las materias.",
+        e instanceof Error ? e.message : "No se pudieron cargar las materias.",
       );
     } finally {
       setLoading(false);
@@ -113,7 +93,9 @@ export default function Materias() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
 
   const selectedPlan = form.study_plan

@@ -16,7 +16,8 @@ export type AcademicUnitPayload = Pick<
 >;
 
 export const academicUnitApi = {
-  list: () => api.get<AcademicUnit[]>("/academic-units/"),
+  list: (signal?: AbortSignal) =>
+    api.get<AcademicUnit[]>("/academic-units/", signal),
   create: (data: AcademicUnitPayload) =>
     api.post<AcademicUnit>("/academic-units/", data),
   update: (id: number, data: AcademicUnitPayload) =>

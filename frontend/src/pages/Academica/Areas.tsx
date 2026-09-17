@@ -10,10 +10,11 @@ import Badge from "../../components/ui/badge/Badge";
 import Switch from "../../components/form/switch/Switch";
 import { PencilIcon, TrashBinIcon } from "../../icons";
 import { StudyArea, StudyAreaPayload, studyAreaApi } from "../../api/studyAreas";
-import { StudyPlan, studyPlanApi } from "../../api/studyPlans";
-import { Career, careerApi } from "../../api/careers";
-import { AcademicUnit, academicUnitApi } from "../../api/academicUnits";
-import { University, universityApi } from "../../api/universities";
+import { StudyPlan } from "../../api/studyPlans";
+import { Career } from "../../api/careers";
+import { AcademicUnit } from "../../api/academicUnits";
+import { University } from "../../api/universities";
+import { formOptionsApi } from "../../api/formOptions";
 
 type AreaForm = StudyAreaPayload & {
   university: number;
@@ -51,24 +52,18 @@ export default function Areas() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const [areasData, plansData, careersData, unitsData, universitiesData] =
-        await Promise.all([
-          studyAreaApi.list(),
-          studyPlanApi.list(),
-          careerApi.list(),
-          academicUnitApi.list(),
-          universityApi.list(),
-        ]);
-      setAreas(areasData);
-      setPlans(plansData);
-      setCareers(careersData);
-      setAcademicUnits(unitsData);
-      setUniversities(universitiesData);
+      const options = await formOptionsApi.list(signal);
+      setAreas(options.study_areas);
+      setPlans(options.study_plans);
+      setCareers(options.careers);
+      setAcademicUnits(options.academic_units);
+      setUniversities(options.universities);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(
         e instanceof Error
           ? e.message
@@ -80,7 +75,9 @@ export default function Areas() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
 
   const universityOptions = universities.map((u) => ({

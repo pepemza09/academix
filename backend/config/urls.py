@@ -1,8 +1,12 @@
+import json
+
 from django.contrib import admin
 from django.urls import include, path
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, login, logout
 from django.db.models import Count
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from django.core.files.images import get_image_dimensions
@@ -115,7 +119,7 @@ class CampusSerializer(serializers.ModelSerializer):
 
 
 class CampusViewSet(viewsets.ModelViewSet):
-    queryset = Campus.objects.select_related("academic_unit").all()
+    queryset = Campus.objects.select_related("academic_unit")
     serializer_class = CampusSerializer
     permission_classes = [IsAuthenticated]
 
@@ -200,7 +204,7 @@ class StudyPlanSerializer(serializers.ModelSerializer):
 
 
 class StudyPlanViewSet(viewsets.ModelViewSet):
-    queryset = StudyPlan.objects.select_related("career").all()
+    queryset = StudyPlan.objects.select_related("career")
     serializer_class = StudyPlanSerializer
     permission_classes = [IsAuthenticated]
 
@@ -262,7 +266,7 @@ class StudyAreaSerializer(serializers.ModelSerializer):
 
 
 class StudyAreaViewSet(viewsets.ModelViewSet):
-    queryset = StudyArea.objects.select_related("study_plan__career").all()
+    queryset = StudyArea.objects.select_related("study_plan__career")
     serializer_class = StudyAreaSerializer
     permission_classes = [IsAuthenticated]
 
@@ -356,7 +360,7 @@ class SubjectSerializer(serializers.ModelSerializer):
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.select_related(
         "study_area__study_plan__career", "nomenclador"
-    ).all()
+    )
     serializer_class = SubjectSerializer
     permission_classes = [IsAuthenticated]
 
@@ -410,6 +414,84 @@ class NomencladorViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
+class FormOptionsSerializer(serializers.Serializer):
+    universities = UniversitySerializer(many=True, read_only=True)
+    academic_units = AcademicUnitSerializer(many=True, read_only=True)
+    campuses = CampusSerializer(many=True, read_only=True)
+    careers = CareerSerializer(many=True, read_only=True)
+    study_plans = StudyPlanSerializer(many=True, read_only=True)
+    study_areas = StudyAreaSerializer(many=True, read_only=True)
+    subjects = SubjectSerializer(many=True, read_only=True)
+    nomencladores = NomencladorSerializer(many=True, read_only=True)
+
+
+class FormOptionsViewSet(viewsets.ReadOnlyModelViewSet):
+    """Devuelve todas las opciones de formulario en un solo endpoint.
+
+    Reemplaza los 5-7 requests separados (universidades, unidades,
+    sedes, carreras, planes, áreas, nomencladores) que hacían Carreras,
+    Planes, Áreas y Materias al montar, reduciendo a una sola petición
+    con prefetch/select_related apropiado.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = FormOptionsSerializer
+
+    @method_decorator(cache_page(5 * 60))
+    def list(self, request, *args, **kwargs):
+        universities = University.objects.annotate(
+            academic_unit_count=Count("academic_units")
+        ).filter(is_active=True).order_by("name")
+        academic_units = AcademicUnit.objects.select_related(
+            "university"
+        ).annotate(campus_count=Count("campuses")).filter(
+            is_active=True
+        ).order_by("code")
+        campuses = Campus.objects.select_related("academic_unit").filter(
+            is_active=True
+        ).order_by("code")
+        careers = Career.objects.select_related("academic_unit").prefetch_related(
+            "campuses"
+        ).annotate(campus_count=Count("campuses")).filter(is_active=True).order_by("code")
+        study_plans = StudyPlan.objects.select_related("career").filter(
+            is_active=True
+        ).order_by("code")
+        study_areas = StudyArea.objects.select_related(
+            "study_plan__career"
+        ).filter(is_active=True).order_by("name")
+        subjects = Subject.objects.select_related(
+            "study_area__study_plan__career", "nomenclador"
+        ).filter(is_active=True).order_by("code")
+        nomencladores = Nomenclador.objects.filter(is_active=True).order_by(
+            "discipline", "subdiscipline", "specialty"
+        )
+
+        return Response(
+            {
+                "universities": UniversitySerializer(
+                    universities, many=True
+                ).data,
+                "academic_units": AcademicUnitSerializer(
+                    academic_units, many=True
+                ).data,
+                "campuses": CampusSerializer(campuses, many=True).data,
+                "careers": CareerSerializer(careers, many=True).data,
+                "study_plans": StudyPlanSerializer(
+                    study_plans, many=True
+                ).data,
+                "study_areas": StudyAreaSerializer(
+                    study_areas, many=True
+                ).data,
+                "subjects": SubjectSerializer(
+                    subjects, many=True
+                ).data,
+                "nomencladores": NomencladorSerializer(
+                    nomencladores, many=True
+                ).data,
+            }
+        )
+
+
 router = DefaultRouter()
 router.register("universities", UniversityViewSet, basename="university")
 router.register("academic-units", AcademicUnitViewSet, basename="academic-unit")
@@ -419,6 +501,7 @@ router.register("study-plans", StudyPlanViewSet, basename="study-plan")
 router.register("study-areas", StudyAreaViewSet, basename="study-area")
 router.register("subjects", SubjectViewSet, basename="subject")
 router.register("nomencladores", NomencladorViewSet, basename="nomenclador")
+router.register("form-options", FormOptionsViewSet, basename="form-options")
 
 
 @require_http_methods(["GET"])
@@ -445,7 +528,6 @@ def user_payload(user):
 @require_http_methods(["POST"])
 @ensure_csrf_cookie
 def login_view(request):
-    import json
     payload = json.loads(request.body or "{}")
     user = authenticate(request, username=payload.get("username"), password=payload.get("password"))
     if user is None:
@@ -498,8 +580,6 @@ def upload_avatar_view(request):
 @require_http_methods(["POST"])
 @ensure_csrf_cookie
 def change_password_view(request):
-    import json
-
     if not request.user.is_authenticated:
         return JsonResponse({"detail": "Autenticación requerida."}, status=401)
 

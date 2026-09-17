@@ -10,9 +10,10 @@ import Badge from "../../components/ui/badge/Badge";
 import Switch from "../../components/form/switch/Switch";
 import { PencilIcon, TrashBinIcon } from "../../icons";
 import { Career, CareerPayload, careerApi } from "../../api/careers";
-import { AcademicUnit, academicUnitApi } from "../../api/academicUnits";
-import { Campus, campusApi } from "../../api/campuses";
-import { University, universityApi } from "../../api/universities";
+import { AcademicUnit } from "../../api/academicUnits";
+import { Campus } from "../../api/campuses";
+import { University } from "../../api/universities";
+import { formOptionsApi } from "../../api/formOptions";
 
 type CareerForm = CareerPayload & { university: number };
 
@@ -46,21 +47,17 @@ export default function Carreras() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const [careersData, unitsData, campusesData, universitiesData] = await Promise.all([
-        careerApi.list(),
-        academicUnitApi.list(),
-        campusApi.list(),
-        universityApi.list(),
-      ]);
-      setCareers(careersData);
-      setAcademicUnits(unitsData);
-      setCampuses(campusesData);
-      setUniversities(universitiesData);
+      const options = await formOptionsApi.list(signal);
+      setCareers(options.careers);
+      setAcademicUnits(options.academic_units);
+      setCampuses(options.campuses);
+      setUniversities(options.universities);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(
         e instanceof Error
           ? e.message
@@ -72,7 +69,9 @@ export default function Carreras() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
 
   const universityOptions = universities.map((u) => ({

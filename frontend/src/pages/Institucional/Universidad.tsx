@@ -50,13 +50,14 @@ export default function Universidad() {
     return matchesSearch && matchesStatus;
   });
 
-  const fetchUniversities = useCallback(async () => {
+  const fetchUniversities = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await universityApi.list();
+      const data = await universityApi.list(signal);
       setUniversities(data);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(
         e instanceof Error ? e.message : "No se pudieron cargar las universidades.",
       );
@@ -66,7 +67,9 @@ export default function Universidad() {
   }, []);
 
   useEffect(() => {
-    fetchUniversities();
+    const controller = new AbortController();
+    fetchUniversities(controller.signal);
+    return () => controller.abort();
   }, [fetchUniversities]);
 
   const openCreate = () => {

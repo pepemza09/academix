@@ -10,7 +10,8 @@ export interface University {
 export type UniversityPayload = Omit<University, "id">;
 
 export const universityApi = {
-  list: () => api.get<University[]>("/universities/"),
+  list: (signal?: AbortSignal) =>
+    api.get<University[]>("/universities/", signal),
   create: (data: UniversityPayload) =>
     api.post<University>("/universities/", data),
   update: (id: number, data: UniversityPayload) =>

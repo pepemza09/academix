@@ -15,7 +15,7 @@ export type CampusPayload = Pick<
 >;
 
 export const campusApi = {
-  list: () => api.get<Campus[]>("/campuses/"),
+  list: (signal?: AbortSignal) => api.get<Campus[]>("/campuses/", signal),
   create: (data: CampusPayload) => api.post<Campus>("/campuses/", data),
   update: (id: number, data: CampusPayload) =>
     api.patch<Campus>(`/campuses/${id}/`, data),

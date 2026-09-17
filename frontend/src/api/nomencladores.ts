@@ -24,7 +24,8 @@ export function nomencladorLabel(n: {
 }
 
 export const nomencladorApi = {
-  list: () => api.get<Nomenclador[]>("/nomencladores/"),
+  list: (signal?: AbortSignal) =>
+    api.get<Nomenclador[]>("/nomencladores/", signal),
   create: (data: NomencladorPayload) =>
     api.post<Nomenclador>("/nomencladores/", data),
   update: (id: number, data: NomencladorPayload) =>
