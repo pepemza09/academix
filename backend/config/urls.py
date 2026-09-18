@@ -5,8 +5,8 @@ from django.urls import include, path
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, login, logout
 from django.db.models import Count
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
+from django.db.models.signals import post_delete, post_save
+from django.core.cache import cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from django.core.files.images import get_image_dimensions
@@ -425,6 +425,13 @@ class FormOptionsSerializer(serializers.Serializer):
     nomencladores = NomencladorSerializer(many=True, read_only=True)
 
 
+FORM_OPTIONS_CACHE_KEY = "api:form_options"
+
+
+def invalidate_form_options_cache(sender, **kwargs):
+    cache.delete(FORM_OPTIONS_CACHE_KEY)
+
+
 class FormOptionsViewSet(viewsets.ReadOnlyModelViewSet):
     """Devuelve todas las opciones de formulario en un solo endpoint.
 
@@ -437,37 +444,41 @@ class FormOptionsViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = FormOptionsSerializer
 
-    @method_decorator(cache_page(5 * 60))
     def list(self, request, *args, **kwargs):
-        universities = University.objects.annotate(
-            academic_unit_count=Count("academic_units")
-        ).filter(is_active=True).order_by("name")
-        academic_units = AcademicUnit.objects.select_related(
-            "university"
-        ).annotate(campus_count=Count("campuses")).filter(
-            is_active=True
-        ).order_by("code")
-        campuses = Campus.objects.select_related("academic_unit").filter(
-            is_active=True
-        ).order_by("code")
-        careers = Career.objects.select_related("academic_unit").prefetch_related(
-            "campuses"
-        ).annotate(campus_count=Count("campuses")).filter(is_active=True).order_by("code")
-        study_plans = StudyPlan.objects.select_related("career").filter(
-            is_active=True
-        ).order_by("code")
-        study_areas = StudyArea.objects.select_related(
-            "study_plan__career"
-        ).filter(is_active=True).order_by("name")
-        subjects = Subject.objects.select_related(
-            "study_area__study_plan__career", "nomenclador"
-        ).filter(is_active=True).order_by("code")
-        nomencladores = Nomenclador.objects.filter(is_active=True).order_by(
-            "discipline", "subdiscipline", "specialty"
-        )
+        data = cache.get(FORM_OPTIONS_CACHE_KEY)
+        if data is None:
+            universities = University.objects.annotate(
+                academic_unit_count=Count("academic_units")
+            ).filter(is_active=True).order_by("name")
+            academic_units = AcademicUnit.objects.select_related(
+                "university"
+            ).annotate(campus_count=Count("campuses")).filter(
+                is_active=True
+            ).order_by("code")
+            campuses = Campus.objects.select_related("academic_unit").filter(
+                is_active=True
+            ).order_by("code")
+            careers = Career.objects.select_related(
+                "academic_unit"
+            ).prefetch_related(
+                "campuses"
+            ).annotate(campus_count=Count("campuses")).filter(
+                is_active=True
+            ).order_by("code")
+            study_plans = StudyPlan.objects.select_related("career").filter(
+                is_active=True
+            ).order_by("code")
+            study_areas = StudyArea.objects.select_related(
+                "study_plan__career"
+            ).filter(is_active=True).order_by("name")
+            subjects = Subject.objects.select_related(
+                "study_area__study_plan__career", "nomenclador"
+            ).filter(is_active=True).order_by("code")
+            nomencladores = Nomenclador.objects.filter(
+                is_active=True
+            ).order_by("discipline", "subdiscipline", "specialty")
 
-        return Response(
-            {
+            data = {
                 "universities": UniversitySerializer(
                     universities, many=True
                 ).data,
@@ -489,7 +500,33 @@ class FormOptionsViewSet(viewsets.ReadOnlyModelViewSet):
                     nomencladores, many=True
                 ).data,
             }
-        )
+            cache.set(FORM_OPTIONS_CACHE_KEY, data, 5 * 60)
+        return Response(data)
+
+
+_FORM_OPTIONS_MODELS = (
+    University,
+    AcademicUnit,
+    Campus,
+    Career,
+    StudyPlan,
+    StudyArea,
+    Subject,
+    Nomenclador,
+)
+for _model in _FORM_OPTIONS_MODELS:
+    post_save.connect(
+        invalidate_form_options_cache,
+        sender=_model,
+        weak=False,
+        dispatch_uid=f"fo_inv_save_{_model.__name__}",
+    )
+    post_delete.connect(
+        invalidate_form_options_cache,
+        sender=_model,
+        weak=False,
+        dispatch_uid=f"fo_inv_del_{_model.__name__}",
+    )
 
 
 router = DefaultRouter()

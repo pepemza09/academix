@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -666,6 +667,7 @@ class FormOptionsEndpointTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.client.login(username="tester", password="testpass")
+        cache.clear()
         self.university = University.objects.create(
             name="Universidad de Prueba"
         )
@@ -811,3 +813,57 @@ class ImportNomencladorCommandTests(TestCase):
             specialty="01 - AERODINAMICA",
         )
         self.assertFalse(record.is_active)
+
+
+class FormOptionsCacheInvalidationTests(TestCase):
+    """El caché de /api/form-options/ se invalida al cambiar cualquier entidad."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            username="tester", password="testpass"
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(username="tester", password="testpass")
+        cache.clear()
+
+    def hit_form_options(self):
+        resp = self.client.get("/api/form-options/")
+        self.assertEqual(resp.status_code, 200)
+        return resp.json()
+
+    def test_creates_career_invalidates_cache(self):
+        university = University.objects.create(name="Universidad de Prueba")
+        unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Tecnología",
+            name="Facultad de Tecnología",
+            university=university,
+        )
+        first = self.hit_form_options()
+        self.assertEqual(len(first["careers"]), 0)
+
+        Career.objects.create(
+            code="ING-01",
+            short_name="Ing.",
+            name="Ingeniería en Informática",
+            academic_unit=unit,
+        )
+        second = self.hit_form_options()
+        self.assertEqual(len(second["careers"]), 1)
+        self.assertEqual(second["careers"][0]["code"], "ING-01")
+
+    def test_deleting_nomenclador_invalidates_cache(self):
+        Nomenclador.objects.create(
+            discipline="1 - CIENCIAS NATURALES Y EXACTAS",
+            subdiscipline="01 - ASTRONOMIA",
+            specialty="01 - ASTROFISICA",
+        )
+        first = self.hit_form_options()
+        self.assertEqual(len(first["nomencladores"]), 1)
+
+        Nomenclador.objects.all().delete()
+        second = self.hit_form_options()
+        self.assertEqual(len(second["nomencladores"]), 0)
