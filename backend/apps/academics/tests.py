@@ -1,3 +1,5 @@
+import json
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -732,3 +734,80 @@ class FormOptionsEndpointTests(TestCase):
         self.assertEqual(data["universities"][0]["academic_unit_count"], 1)
         self.assertEqual(data["academic_units"][0]["campus_count"], 1)
         self.assertEqual(data["careers"][0]["campus_count"], 1)
+
+
+class ImportNomencladorCommandTests(TestCase):
+    """El comando import_nomenclador carga los JSON con claves en español."""
+
+    def sample_file(self, directory):
+        path = Path(directory) / "nomenclador.json"
+        path.write_text(
+            json.dumps(
+                [
+                    {
+                        "disciplina": "1 - CIENCIAS NATURALES Y EXACTAS",
+                        "subdisciplina": "01 - ASTRONOMIA",
+                        "especialidad": "01 - ASTROFISICA",
+                        "activo": True,
+                    },
+                    {
+                        "disciplina": "1 - CIENCIAS NATURALES Y EXACTAS",
+                        "subdisciplina": "01 - ASTRONOMIA",
+                        "especialidad": "02 - COSMOLOGIA Y COSMOGONIA",
+                        "activo": True,
+                    },
+                    {
+                        "disciplina": "2 - INGENIERIA Y TECNOLOGIA",
+                        "subdisciplina": "16 - INGENIERIA AERONAUTICA",
+                        "especialidad": "01 - AERODINAMICA",
+                        "activo": False,
+                    },
+                ]
+            ),
+            encoding="utf-8-sig",
+        )
+        return path
+
+    def test_import_creates_records(self):
+        with TemporaryDirectory() as tmp:
+            self.sample_file(tmp)
+            call_command(
+                "import_nomenclador", directory=tmp, stdout=StringIO()
+            )
+        self.assertEqual(Nomenclador.objects.count(), 3)
+        record = Nomenclador.objects.get(
+            discipline="1 - CIENCIAS NATURALES Y EXACTAS",
+            subdiscipline="01 - ASTRONOMIA",
+            specialty="02 - COSMOLOGIA Y COSMOGONIA",
+        )
+        self.assertTrue(record.is_active)
+
+    def test_import_is_idempotent(self):
+        with TemporaryDirectory() as tmp:
+            self.sample_file(tmp)
+            call_command(
+                "import_nomenclador", directory=tmp, stdout=StringIO()
+            )
+            call_command(
+                "import_nomenclador", directory=tmp, stdout=StringIO()
+            )
+        self.assertEqual(Nomenclador.objects.count(), 3)
+
+    def test_import_updates_is_active(self):
+        Nomenclador.objects.create(
+            discipline="2 - INGENIERIA Y TECNOLOGIA",
+            subdiscipline="16 - INGENIERIA AERONAUTICA",
+            specialty="01 - AERODINAMICA",
+            is_active=True,
+        )
+        with TemporaryDirectory() as tmp:
+            self.sample_file(tmp)
+            call_command(
+                "import_nomenclador", directory=tmp, stdout=StringIO()
+            )
+        record = Nomenclador.objects.get(
+            discipline="2 - INGENIERIA Y TECNOLOGIA",
+            subdiscipline="16 - INGENIERIA AERONAUTICA",
+            specialty="01 - AERODINAMICA",
+        )
+        self.assertFalse(record.is_active)
