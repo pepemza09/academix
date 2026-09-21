@@ -365,6 +365,16 @@ class SubjectViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
+def _nomenclador_code(value):
+    """Extrae el código del prefijo 'NN - texto' de un valor del nomenclador."""
+    if not value:
+        return None
+    text = str(value).strip()
+    if " - " in text:
+        return text.split(" - ", 1)[0].strip()
+    return text
+
+
 class NomencladorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Nomenclador
@@ -394,6 +404,28 @@ class NomencladorSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "Ya existe un nomenclador con esa disciplina, subdisciplina y especialidad."
                 )
+            codes = (
+                _nomenclador_code(combo[0]),
+                _nomenclador_code(combo[1]),
+                _nomenclador_code(combo[2]),
+            )
+            if all(codes):
+                candidates = Nomenclador.objects.values(
+                    "id", "discipline", "subdiscipline", "specialty"
+                )
+                if self.instance:
+                    candidates = candidates.exclude(pk=self.instance.pk)
+                for candidate in candidates:
+                    candidate_codes = (
+                        _nomenclador_code(candidate["discipline"]),
+                        _nomenclador_code(candidate["subdiscipline"]),
+                        _nomenclador_code(candidate["specialty"]),
+                    )
+                    if candidate_codes == codes:
+                        raise serializers.ValidationError(
+                            "Ya existe un nomenclador con esos códigos de "
+                            "disciplina, subdisciplina y especialidad."
+                        )
         return attrs
 
 

@@ -17,6 +17,11 @@ import {
 
 type NomencladorForm = NomencladorPayload;
 
+const compareNomencladores = (a: Nomenclador, b: Nomenclador) =>
+  a.discipline.localeCompare(b.discipline, "es") ||
+  a.subdiscipline.localeCompare(b.subdiscipline, "es") ||
+  a.specialty.localeCompare(b.specialty, "es");
+
 const EMPTY_FORM: NomencladorForm = {
   discipline: "",
   subdiscipline: "",
@@ -113,11 +118,13 @@ export default function NomencladorPage() {
       if (editing) {
         const updated = await nomencladorApi.update(editing.id, form);
         setNomencladores((prev) =>
-          prev.map((n) => (n.id === updated.id ? updated : n)),
+          prev
+            .map((n) => (n.id === updated.id ? updated : n))
+            .sort(compareNomencladores),
         );
       } else {
         const created = await nomencladorApi.create(form);
-        setNomencladores((prev) => [...prev, created]);
+        setNomencladores((prev) => [...prev, created].sort(compareNomencladores));
       }
       setModalOpen(false);
     } catch (e) {
