@@ -228,3 +228,6 @@ backend/media/
 backup/*
 !backup/.gitkeep
 
+# Academix: insumos de carga manual (planillas, JSON de origen) no se versionan
+auto/
+
