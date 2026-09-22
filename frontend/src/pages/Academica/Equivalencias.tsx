@@ -77,6 +77,8 @@ export default function Equivalencias() {
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState(0);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [newSearch, setNewSearch] = useState("");
+  const [oldSearch, setOldSearch] = useState("");
 
   const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -157,6 +159,8 @@ export default function Equivalencias() {
     setEditing(null);
     setForm(EMPTY_FORM);
     setFormError(null);
+    setNewSearch("");
+    setOldSearch("");
     setModalOpen(true);
   };
 
@@ -175,6 +179,8 @@ export default function Equivalencias() {
       ? academicUnits.find((u) => u.id === career.academic_unit)
       : undefined;
     setEditing(eq);
+    setNewSearch("");
+    setOldSearch("");
     setForm({
       new_subjects: [...eq.new_subjects],
       old_subjects: [...eq.old_subjects],
@@ -344,30 +350,68 @@ export default function Equivalencias() {
           Primero elige el plan de estudios.
         </p>
       );
-    const list = subjectsOfPlan(planId);
-    if (list.length === 0)
+    const all = subjectsOfPlan(planId);
+    if (all.length === 0)
       return (
         <p className="text-xs text-gray-400 dark:text-gray-500">
           El plan no tiene materias.
         </p>
       );
+    const query = side === "new" ? newSearch : oldSearch;
+    const setQuery = side === "new" ? setNewSearch : setOldSearch;
+    const term = query.trim().toLowerCase();
+    const list = term
+      ? all.filter((s) =>
+          `${s.code} ${s.name}`.toLowerCase().includes(term),
+        )
+      : all;
     return (
-      <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-gray-800">
-        {list.map((s) => (
-          <label
-            key={s.id}
-            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
+      <div className="space-y-2">
+        <div className="relative">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por código o nombre…"
+            className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 pr-9 text-sm shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+          />
+          <svg
+            className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="2"
           >
-            <input
-              type="checkbox"
-              checked={selected.includes(s.id)}
-              onChange={() => toggleSubject(side, s.id)}
-              className="h-4 w-4 accent-brand-500"
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"
             />
-            <span className="font-medium">{s.code}</span>
-            <span className="truncate">{s.name}</span>
-          </label>
-        ))}
+          </svg>
+        </div>
+        {list.length === 0 ? (
+          <p className="rounded-lg border border-gray-200 px-3 py-4 text-center text-xs text-gray-400 dark:border-gray-800 dark:text-gray-500">
+            Sin resultados para “{query.trim()}”.
+          </p>
+        ) : (
+          <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+            {list.map((s) => (
+              <label
+                key={s.id}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(s.id)}
+                  onChange={() => toggleSubject(side, s.id)}
+                  className="h-4 w-4 accent-brand-500"
+                />
+                <span className="font-medium">{s.code}</span>
+                <span className="truncate">{s.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -617,7 +661,9 @@ export default function Equivalencias() {
                   }
                   value={form.career}
                   options={careerOptions}
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    setNewSearch("");
+                    setOldSearch("");
                     setForm((prev) => ({
                       ...prev,
                       career: value,
@@ -625,8 +671,8 @@ export default function Equivalencias() {
                       old_plan: 0,
                       new_subjects: [],
                       old_subjects: [],
-                    }))
-                  }
+                    }));
+                  }}
                 />
               </div>
             </div>
@@ -642,13 +688,14 @@ export default function Equivalencias() {
                   }
                   value={form.new_plan}
                   options={planOptions}
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    setNewSearch("");
                     setForm((prev) => ({
                       ...prev,
                       new_plan: value,
                       new_subjects: [],
-                    }))
-                  }
+                    }));
+                  }}
                 />
                 <div className="mt-2">
                   {renderCheckboxes(
@@ -668,13 +715,14 @@ export default function Equivalencias() {
                   }
                   value={form.old_plan}
                   options={planOptions}
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    setOldSearch("");
                     setForm((prev) => ({
                       ...prev,
                       old_plan: value,
                       old_subjects: [],
-                    }))
-                  }
+                    }));
+                  }}
                 />
                 <div className="mt-2">
                   {renderCheckboxes(

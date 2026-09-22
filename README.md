@@ -42,7 +42,7 @@ Todos los secretos, usuarios, contraseñas, tokens y URLs de conexión se leen d
 
 ## Backup y restauración de datos
 
-Los datos de negocio (universidades, unidades, sedes, carreras, planes, áreas, materias y nomencladores) se respaldan como JSON en `./backup` con *natural keys*: cada registro se identifica por sus códigos/combinaciones únicas, no por su `id`, de modo que la restauración funciona aunque la estructura de la base haya cambiado (campos agregados/quitados, IDs nuevos).
+Los datos de negocio (universidades, unidades, sedes, carreras, planes, áreas, materias, equivalencias y nomencladores) se respaldan como JSON en `./backup` con *natural keys*: cada registro se identifica por sus códigos/combinaciones únicas, no por su `id`, de modo que la restauración funciona aunque la estructura de la base haya cambiado (campos agregados/quitados, IDs nuevos). Las equivalencias se restauran por contenido (conjuntos de materias + regla).
 
 ```bash
 # Backups

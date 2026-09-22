@@ -83,7 +83,7 @@ El dominio es jerárquico y usa códigos únicos dentro de su nivel padre y esta
 | Nomenclador | `/api/nomencladores/` | `discipline`, `subdiscipline`, `specialty` (editables), `is_active`; ordenado por el triple; validación 400 por texto exacto o por códigos |
 | Opciones de formulario | `/api/form-options/` | solo lectura; todas las listas activas en una petición (universidades → materias + nomencladores), cacheadas 5 min en Redis con invalidación por `post_save`/`post_delete` |
 
-Protección de eliminación verificada (regla de integridad referencial):
+Protección de eliminación verificada (regla de integridad referencial), cubierta por la suite (54 tests) y chequeada en vivo contra la API con objetos temporales (los 8 casos → 400, borrado hoja→raíz en cadena → 204):
 - `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204.
 - `DELETE /api/academic-units/{id}/` con sedes o carreras asociadas -> 400; sin dependencias -> 204.
 - `DELETE /api/campuses/{id}/` asociado a carreras (M2M `career.campuses`) -> 400; sin asociación -> 204.
@@ -109,7 +109,7 @@ Protección de eliminación verificada (regla de integridad referencial):
 - `frontend/src/pages/Academica/Planes.tsx`: CRUD de planes de estudio (universidad → unidad académica → carrera), con duración en años.
 - `frontend/src/pages/Academica/Areas.tsx`: CRUD de áreas (universidad → unidad académica → carrera → plan).
 - `frontend/src/pages/Academica/Materias.tsx`: CRUD de materias (universidad → unidad académica → carrera → plan → área), con año y periodo.
-- `frontend/src/pages/Academica/Equivalencias.tsx`: CRUD de equivalencias (carrera → plan reciente + plan anterior, multiselección de materias por lado con checkboxes, regla de certificación opcional); listado con lado reciente primero, búsqueda, filtro por plan y estado.
+- `frontend/src/pages/Academica/Equivalencias.tsx`: CRUD de equivalencias (carrera → plan reciente + plan anterior, multiselección de materias por lado con checkboxes, regla de certificación opcional); cada listado de materias tiene su propio buscador por código/nombre (se limpia al cambiar de carrera/plan); listado con lado reciente primero, búsqueda, filtro por plan y estado.
 - `frontend/src/pages/Configuraciones/Nomenclador.tsx`: CRUD del nomenclador con búsqueda y filtro por estado; tras crear/editar reordena la lista por disciplina → subdisciplina → especialidad (no agrega al final).
 - `frontend/src/pages/Dashboard/AcademicsHome.tsx`: resumen de solo lectura con métricas.
 
@@ -120,16 +120,17 @@ Protección de eliminación verificada (regla de integridad referencial):
 - **Planes**: el formulario pide código del plan, título que otorga, duración en años (valida el año de las materias) y toggles "Activo" y "Vigente". El listado muestra código, título, duración, carrera (nombre + código), estado activo y vigente.
 - **Áreas**: formulario con nombre del área y toggle "Activa". El listado muestra nombre, plan (título + código) y carrera (nombre + código).
 - **Materias**: formulario con cascada universidad → unidad académica → carrera → plan → área, código de la materia, nombre, año de dictado (input numérico limitado a la duración del plan) y periodo (select con opciones fijas de cuatrimestres/bimestres/anual). El listado muestra código, nombre, año, periodo, área, plan, carrera y estado.
+- **Equivalencias**: formulario con cascada universidad → unidad académica → carrera → plan reciente + plan anterior; cada lado tiene multiselección de materias con checkboxes y su propio buscador por código/nombre (se limpia al cambiar de carrera o plan). Regla de certificación opcional para casos no materia↔materia. El listado muestra el lado reciente primero, con búsqueda y filtro por plan y estado.
 - Todas las páginas tienen búsqueda y filtro por estado activo.
 
 ## Handoff de desarrollo: estado actual del dominio
 
 - CRUD funcional (frontend + backend) de: universidades, unidades académicas, sedes, carreras, planes de estudio, áreas, materias, equivalencias y nomenclador, conectados a la API bajo `/api/` con búsqueda y filtro por estado, con protección de eliminación por dependencias.
-- Datos reales cargados: carrera `450` (Contador Público) con planes `CP2026` (duración 4 años, vigente, 6 áreas, **30 materias**) y `CP2019` (duración 5 años, no vigente, 7 áreas, **48 materias**); **32 equivalencias** 2026↔2019 (29 materia↔materia + 3 certificaciones); nomenclador completo con 527 combinaciones.
+- Datos reales cargados: carrera `450` (Contador Público) con planes `CP2026` (duración 4 años, vigente, 6 áreas, **30 materias**) y `CP2019` (duración 5 años, no vigente, 7 áreas, **48 materias**); las **32 equivalencias** 2026↔2019 (29 materia↔materia + 3 certificaciones) están en el backup pero se flushearon de la base viva para probar la carga manual; nomenclador completo con 527 combinaciones.
 - Respaldo vigente en `./backup` (ver `README.md`): 661 registros con natural keys.
 - Dashboard (`AcademicsHome.tsx`) es un resumen de solo lectura.
 - Existe un superusuario local `admin` (creado previamente; sin commitear credenciales reales, están en `.env`).
-- Backend: `manage.py check` OK y 51 tests pasan.
+- Backend: `manage.py check` OK y 54 tests pasan.
 - CRUD validados de extremo a extremo (create 201, patch 200, list 200, delete 204, duplicados 400) con sesión + CSRF.
 
 ### Optimización de rendimiento (frontend)
