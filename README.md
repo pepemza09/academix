@@ -64,6 +64,16 @@ docker compose exec backend python manage.py restore_data --yes
 
 La restauración tolera cambios de esquema: solo aplica los campos presentes tanto en el JSON como en el modelo actual; los campos nuevos quedan con su valor por defecto y los modelos eliminados se ignoran. Los backups (`.json`) no se versionan en Git; la carpeta `./backup` está montada en el contenedor `backend`.
 
+## Insumos de carga manual
+
+Los archivos fuente para cargas (planillas exportadas, JSON de origen) van en `./auto/`, que está ignorada por Git igual que `./backup`. Ejemplo: el nomenclador disciplinar se carga con:
+
+```bash
+docker compose exec backend python manage.py import_nomenclador --directory=/backup --pattern=nomenclador
+```
+
+El comando es idempotente (fusiona por natural key disciplina/subdisciplina/especialidad). La identidad de negocio del nomenclador es el triple de **códigos** (`05/41/99`), no el texto: ver `AGENTS.md`.
+
 ## Desarrollo asistido por IA
 
 Las reglas globales están en [.github/AGENTS.md](.github/AGENTS.md). Los subagentes especializados están en [.github/agents/academix-backend.agent.md](.github/agents/academix-backend.agent.md) y [.github/agents/academix-frontend.agent.md](.github/agents/academix-frontend.agent.md). Ambos deben cargar los skills locales indicados antes de trabajar.

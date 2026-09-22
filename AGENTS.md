@@ -46,8 +46,18 @@ El dominio es jerárquico y usa códigos únicos dentro de su nivel padre y esta
 
 ### Subject (Materia)
 - Pertenece a un `StudyArea`.
-- Campos: `code` (código de la materia), `name` (nombre), `year` (año en el que se dicta; se valida contra `duration_years` del plan -> 1..duración), `period` (periodo de dictado, opciones fijas: 1er/2do cuatrimestre, 1er-4to bimestre, anual), `is_active`.
-- El serializer expone además: `period_label`, `study_area_name`, `study_plan_code`, `study_plan_title`, `career_name`, `career_code`, `duration_years`.
+- Campos: `code` (**único global**, no solo dentro del área), `name` (nombre), `year` (año en el que se dicta; se valida contra `duration_years` del plan -> 1..duración), `period` (periodo de dictado, opciones fijas: 1er/2do cuatrimestre, 1er-4to bimestre, anual), `is_active`.
+- Clasificación opcional por `Nomenclador` (FK `PROTECT`) + `nomenclador_extra` (texto libre para el calificador entre paréntesis, ej. `Derecho Público`).
+- Ordenamiento por `code`. El serializer expone además: `period_label`, `study_area_name`, `study_plan_code`, `study_plan_title`, `career_name`, `career_code`, `duration_years`, `nomenclador_label`.
+
+### Nomenclador (clasificación disciplinar)
+- Tabla plana (no jerárquica en FK): `discipline`, `subdiscipline`, `specialty`, `is_active`.
+- Los valores tienen forma `"NN - texto"`; la identidad de negocio es el **triple de códigos** (ej. `05/41/99`), no el texto: el mismo código puede repetirse en distintos padres con distinto significado y hay filas genéricas `00/00` (una por disciplina) que deben conservarse.
+- Clave única DB `unique_nomenclador_combo` sobre los tres campos de texto.
+- El serializer rechaza con 400 tanto el duplicado de texto exacto como el de **códigos** (`_nomenclador_code()` extrae el prefijo `NN`), para casos como `CIENCIAS EXACTAS Y NATURALES` vs `CIENCIAS NATURALES Y EXACTAS` con mismos códigos.
+- Tiene N `Subject` (vía `Subject.nomenclador`, `PROTECT`).
+- **No se puede eliminar** si tiene materias asociadas (400).
+- Carga masiva con `python manage.py import_nomenclador [--directory=...] [--pattern=...]`: idempotente por natural key (actualiza lo existente, crea lo nuevo).
 
 ## Endpoints API de negocio (bajo `/api/`)
 
@@ -59,7 +69,9 @@ El dominio es jerárquico y usa códigos únicos dentro de su nivel padre y esta
 | Carrera | `/api/careers/` | `academic_unit` (editable), `academic_unit_name`, `campuses` (editable), `campus_count`, `campus_details` (lectura: `[{id, code, name}]`) |
 | Plan de estudio | `/api/study-plans/` | `career` (editable), `career_name`, `career_code`, `intermediate_title`, `duration_years`, `is_active`, `is_current` |
 | Área | `/api/study-areas/` | `study_plan` (editable), `study_plan_code`, `study_plan_title`, `career_name`, `career_code`, `is_active` |
-| Materia | `/api/subjects/` | `study_area` (editable), `study_area_name`, `study_plan_code/title`, `career_name/code`, `period` (editable) + `period_label`, `year` (validado contra `duration_years`), `duration_years`, `is_active` |
+| Materia | `/api/subjects/` | `study_area` (editable), `study_area_name`, `study_plan_code/title`, `career_name/code`, `period` (editable) + `period_label`, `year` (validado contra `duration_years`), `duration_years`, `nomenclador` (editable) + `nomenclador_extra` (editable) + `nomenclador_label`, `is_active`; `code` único global |
+| Nomenclador | `/api/nomencladores/` | `discipline`, `subdiscipline`, `specialty` (editables), `is_active`; ordenado por el triple; validación 400 por texto exacto o por códigos |
+| Opciones de formulario | `/api/form-options/` | solo lectura; todas las listas activas en una petición (universidades → materias + nomencladores), cacheadas 5 min en Redis con invalidación por `post_save`/`post_delete` |
 
 Protección de eliminación verificada (regla de integridad referencial):
 - `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204.
@@ -68,14 +80,16 @@ Protección de eliminación verificada (regla de integridad referencial):
 - `DELETE /api/careers/{id}/` con planes asociados -> 400.
 - `DELETE /api/study-plans/{id}/` con áreas asociadas -> 400.
 - `DELETE /api/study-areas/{id}/` con materias asociadas -> 400; sin materias -> 204.
+- `DELETE /api/nomencladores/{id}/` con materias asociadas (FK `PROTECT` vía `Subject.nomenclador`) -> 400; sin materias -> 204.
 
 ## Archivos clave de negocio
 
-- `backend/config/urls.py`: serializers + viewsets de negocio y endpoints auth.
-- `backend/apps/academics/models.py`: modelos `University`, `AcademicUnit`, `Campus`, `Career`, `StudyPlan`, `StudyArea`, `Subject`.
-- `backend/apps/academics/migrations/0001_initial.py` ... `0007_studyplan_intermediate_title.py`, `0008_studyplan_duration_years_subject.py`.
+- `backend/config/urls.py`: serializers + viewsets de negocio, `FormOptionsViewSet` y endpoints auth.
+- `backend/apps/academics/models.py`: modelos `University`, `AcademicUnit`, `Campus`, `Career`, `StudyPlan`, `StudyArea`, `Subject`, `Nomenclador`.
+- `backend/apps/academics/migrations/0001_initial.py` ... `0013_subject_order_by_code.py` (incluye `0009_nomenclador_subject_nomenclador`, `0011_studyarea_unique_name_per_plan`, `0012_subject_code_unique_global`).
+- `backend/apps/academics/management/commands/`: `backup_data`, `restore_data`, `import_nomenclador`.
 - `backend/apps/academics/tests.py`: validación funcional de los modelos.
-- `frontend/src/api/universities.ts`, `academicUnits.ts`, `campuses.ts`, `careers.ts`, `studyPlans.ts`, `studyAreas.ts`, `subjects.ts`: servicios API por entidad.
+- `frontend/src/api/universities.ts`, `academicUnits.ts`, `campuses.ts`, `careers.ts`, `studyPlans.ts`, `studyAreas.ts`, `subjects.ts`, `nomencladores.ts`, `formOptions.ts`: servicios API por entidad.
 - `frontend/src/pages/Institucional/Universidad.tsx`: CRUD de universidades.
 - `frontend/src/pages/Institucional/UnidadAcademica.tsx`: CRUD de unidades académicas con combobox de universidad.
 - `frontend/src/pages/Institucional/Sede.tsx`: CRUD de sedes con combobox de unidad académica.
@@ -83,6 +97,7 @@ Protección de eliminación verificada (regla de integridad referencial):
 - `frontend/src/pages/Academica/Planes.tsx`: CRUD de planes de estudio (universidad → unidad académica → carrera), con duración en años.
 - `frontend/src/pages/Academica/Areas.tsx`: CRUD de áreas (universidad → unidad académica → carrera → plan).
 - `frontend/src/pages/Academica/Materias.tsx`: CRUD de materias (universidad → unidad académica → carrera → plan → área), con año y periodo.
+- `frontend/src/pages/Configuraciones/Nomenclador.tsx`: CRUD del nomenclador con búsqueda y filtro por estado; tras crear/editar reordena la lista por disciplina → subdisciplina → especialidad (no agrega al final).
 - `frontend/src/pages/Dashboard/AcademicsHome.tsx`: resumen de solo lectura con métricas.
 
 ## Reglas de negocio de la UI (patrón por CRUD)
@@ -96,16 +111,18 @@ Protección de eliminación verificada (regla de integridad referencial):
 
 ## Handoff de desarrollo: estado actual del dominio
 
-- CRUD funcional (frontend + backend) de: universidades, unidades académicas, sedes, carreras, planes de estudio, áreas y materias, conectados a la API bajo `/api/` con búsqueda y filtro por estado, con protección de eliminación por dependencias.
+- CRUD funcional (frontend + backend) de: universidades, unidades académicas, sedes, carreras, planes de estudio, áreas, materias y nomenclador, conectados a la API bajo `/api/` con búsqueda y filtro por estado, con protección de eliminación por dependencias.
+- Datos reales cargados: carrera `450` (Contador Público) con plan `CP2026` (duración 4 años), 6 áreas (incluye `Humanística`) y **30 materias** con año, periodo, código, nomenclador y calificador extra; nomenclador completo con 527 combinaciones.
+- Respaldo vigente en `./backup` (ver `README.md`): 573 registros con natural keys.
 - Dashboard (`AcademicsHome.tsx`) es un resumen de solo lectura.
 - Existe un superusuario local `admin` (creado previamente; sin commitear credenciales reales, están en `.env`).
-- Backend: `manage.py check` OK y 31 tests pasan.
-- CRUD validados de extremo a extremo (create 201, patch 200, list 200, delete 204) con sesión + CSRF.
+- Backend: `manage.py check` OK y 42 tests pasan.
+- CRUD validados de extremo a extremo (create 201, patch 200, list 200, delete 204, duplicados 400) con sesión + CSRF.
 
 ### Optimización de rendimiento (frontend)
 
 - **Code-splitting**: `App.tsx` carga todas las rutas con `React.lazy` + `Suspense`. El bundle principal bajó de 674KB a ~286KB (gzip ~90KB); cada página CRUD es un chunk separado (~12KB) y el Calendario (264KB) se carga on-demand.
-- **Updates optimistas en las páginas CRUD**: al crear/editar/eliminar, las 6 páginas (`Universidad`, `UnidadAcademica`, `Sede`, `Carreras`, `Planes`, `Areas`) actualizan el estado local con la respuesta de la API en lugar de relanzar `fetchData()` (que recargaba todas las listas de dependencias por red). `fetchData()` solo corre en el `useEffect` inicial de montaje.
+- **Updates optimistas en las páginas CRUD**: al crear/editar/eliminar, las páginas (`Universidad`, `UnidadAcademica`, `Sede`, `Carreras`, `Planes`, `Areas`, `Nomenclador`) actualizan el estado local con la respuesta de la API en lugar de relanzar `fetchData()` (que recargaba todas las listas de dependencias por red). `Nomenclador` además reordena la lista tras guardar. `fetchData()` solo corre en el `useEffect` inicial de montaje.
 - **Backend `/api/auth/me/`**: `user_payload` usa una consulta read-only (`Profile.objects.filter(...).only("avatar")`) en vez de `get_or_create` por request; el perfil se crea solo al subir avatar.
 - Los serializers de listado ya usan `select_related`/`prefetch_related`/`annotate` (sin N+1).
 

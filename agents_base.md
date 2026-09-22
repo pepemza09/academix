@@ -118,6 +118,7 @@ docker compose restart nginx
 
 - No hardcodear secretos ni valores sensibles en código.
 - Mantener `.env` fuera del control de versiones; solo `.env.example` debe versionarse.
+- Insumos de carga manual (planillas, JSON de origen) van en `auto/`, también ignorada por Git, igual que `autoskills/`, `./backup/*.json` y `backend/media/`.
 - Antes de editar, formular una hipótesis simple y ejecutar una validación breve.
 - Tras cambios, ejecutar al menos: validación del backend (`manage.py check` o tests) o build del frontend si se modifica UI.
 - Si se trabaja con Docker, validar el estado real con `docker compose ps` y reintentar con `docker compose up -d --build <servicio>` cuando sea requerido.
