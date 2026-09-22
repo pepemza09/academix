@@ -545,6 +545,43 @@ class DeleteProtectionApiTests(TestCase):
         self.assertIn("code", resp.data)
         self.assertEqual(Subject.objects.filter(code="UNICO-001").count(), 1)
 
+    def test_nomenclador_with_subjects_cannot_be_deleted(self):
+        _, _, _, area = self.create_hierarchy()
+        nomenclador = Nomenclador.objects.create(
+            discipline="1 - CIENCIAS NATURALES Y EXACTAS",
+            subdiscipline="01 - ASTRONOMIA",
+            specialty="01 - ASTROFISICA",
+        )
+        Subject.objects.create(
+            code="MAT-101",
+            name="Álgebra Lineal",
+            study_area=area,
+            year=1,
+            period="1Q",
+            nomenclador=nomenclador,
+        )
+        resp = self.client.delete(
+            reverse("nomenclador-detail", args=[nomenclador.id])
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(
+            Nomenclador.objects.filter(id=nomenclador.id).exists()
+        )
+
+    def test_nomenclador_without_subjects_can_be_deleted(self):
+        nomenclador = Nomenclador.objects.create(
+            discipline="1 - CIENCIAS NATURALES Y EXACTAS",
+            subdiscipline="01 - ASTRONOMIA",
+            specialty="01 - ASTROFISICA",
+        )
+        resp = self.client.delete(
+            reverse("nomenclador-detail", args=[nomenclador.id])
+        )
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(
+            Nomenclador.objects.filter(id=nomenclador.id).exists()
+        )
+
 
 class BackupRestoreRoundTripTests(TestCase):
     """El backup con natural keys restaura todo el circuito jerárquico."""
@@ -1005,6 +1042,15 @@ class EquivalenceApiTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertTrue(Subject.objects.filter(id=self.sub_new.id).exists())
+
+    def test_subject_in_equivalence_old_side_cannot_be_deleted(self):
+        equivalence = Equivalence.objects.create(rule_text="")
+        equivalence.old_subjects.add(self.sub_old1)
+        resp = self.client.delete(
+            reverse("subject-detail", args=[self.sub_old1.id])
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(Subject.objects.filter(id=self.sub_old1.id).exists())
 
     def test_equivalence_can_be_deleted(self):
         equivalence = Equivalence.objects.create(rule_text="")
