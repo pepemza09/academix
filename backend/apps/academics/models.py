@@ -172,6 +172,43 @@ class Subject(models.Model):
         return f"{self.code} - {self.name}"
 
 
+class Equivalence(models.Model):
+    """Equivalencia entre materias de planes distintos (genérica N:M).
+
+    new_subjects: materias del plan más reciente (se muestran primero).
+    old_subjects: materias de planes anteriores.
+    rule_text: regla de certificación (ej. "Certifica Inglés") para los
+        casos que no son materia↔materia; puede acompañar a los lados
+        o ir sola.
+    """
+
+    new_subjects = models.ManyToManyField(
+        Subject, related_name="equivalences_as_new", blank=True
+    )
+    old_subjects = models.ManyToManyField(
+        Subject, related_name="equivalences_as_old", blank=True
+    )
+    rule_text = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        new_codes = "+".join(
+            self.new_subjects.order_by("code").values_list("code", flat=True)
+        )
+        old_codes = "+".join(
+            self.old_subjects.order_by("code").values_list("code", flat=True)
+        )
+        base = f"{new_codes} ↔ {old_codes}".strip(" ↔")
+        if self.rule_text:
+            return f"{base} ({self.rule_text})" if base else self.rule_text
+        return base or f"Equivalencia #{self.pk}"
+
+
 class Nomenclador(models.Model):
     discipline = models.CharField(max_length=120)
     subdiscipline = models.CharField(max_length=120)

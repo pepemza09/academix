@@ -20,6 +20,7 @@ const Carreras = lazy(() => import("./pages/Academica/Carreras"));
 const Planes = lazy(() => import("./pages/Academica/Planes"));
 const Areas = lazy(() => import("./pages/Academica/Areas"));
 const Materias = lazy(() => import("./pages/Academica/Materias"));
+const Equivalencias = lazy(() => import("./pages/Academica/Equivalencias"));
 const Nomenclador = lazy(() => import("./pages/Configuraciones/Nomenclador"));
 const Configuraciones = lazy(
   () => import("./pages/Configuraciones/Index"),
@@ -61,6 +62,10 @@ export default function App() {
               <Route path="/academica/planes" element={<Planes />} />
               <Route path="/academica/areas" element={<Areas />} />
               <Route path="/academica/materias" element={<Materias />} />
+              <Route
+                path="/academica/equivalencias"
+                element={<Equivalencias />}
+              />
 
               {/* Perfil y utilidades */}
               <Route path="/profile" element={<UserProfiles />} />

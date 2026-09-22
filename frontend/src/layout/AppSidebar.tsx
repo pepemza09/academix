@@ -44,6 +44,7 @@ const navItems: NavItem[] = [
       { name: "Planes", path: "/academica/planes", pro: false },
       { name: "Áreas", path: "/academica/areas", pro: false },
       { name: "Materias", path: "/academica/materias", pro: false },
+      { name: "Equivalencias", path: "/academica/equivalencias", pro: false },
     ],
   },
   {

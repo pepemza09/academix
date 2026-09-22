@@ -13,6 +13,7 @@ from .models import (
     AcademicUnit,
     Campus,
     Career,
+    Equivalence,
     Nomenclador,
     StudyArea,
     StudyPlan,
@@ -867,3 +868,183 @@ class FormOptionsCacheInvalidationTests(TestCase):
         Nomenclador.objects.all().delete()
         second = self.hit_form_options()
         self.assertEqual(len(second["nomencladores"]), 0)
+
+
+class EquivalenceApiTests(TestCase):
+    """Equivalencias N:M entre materias de planes distintos + certificaciones."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            username="tester", password="testpass"
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(username="tester", password="testpass")
+        university = University.objects.create(name="Universidad de Prueba")
+        unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Tecnología",
+            name="Facultad de Tecnología",
+            university=university,
+        )
+        career = Career.objects.create(
+            code="ING-01",
+            short_name="Ing.",
+            name="Ingeniería",
+            academic_unit=unit,
+        )
+        self.plan_new = StudyPlan.objects.create(
+            code="PLAN-2026", title="Ingeniero", career=career
+        )
+        self.plan_old = StudyPlan.objects.create(
+            code="PLAN-2019", title="Ingeniero", career=career
+        )
+        area_new = StudyArea.objects.create(
+            name="Básicas", study_plan=self.plan_new
+        )
+        area_old = StudyArea.objects.create(
+            name="Básicas", study_plan=self.plan_old
+        )
+        self.sub_new = Subject.objects.create(
+            code="N-101",
+            name="Nueva Uno",
+            study_area=area_new,
+            year=1,
+            period="1Q",
+        )
+        self.sub_old1 = Subject.objects.create(
+            code="V-101",
+            name="Vieja Uno",
+            study_area=area_old,
+            year=1,
+            period="1Q",
+        )
+        self.sub_old2 = Subject.objects.create(
+            code="V-102",
+            name="Vieja Dos",
+            study_area=area_old,
+            year=1,
+            period="2Q",
+        )
+
+    def post_equivalence(self, **payload):
+        return self.client.post(
+            reverse("equivalence-list"),
+            payload,
+            content_type="application/json",
+        )
+
+    def test_create_one_to_many_returns_new_side_first(self):
+        resp = self.post_equivalence(
+            new_subjects=[self.sub_new.id],
+            old_subjects=[self.sub_old1.id, self.sub_old2.id],
+            rule_text="",
+            is_active=True,
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(
+            [s["code"] for s in resp.data["new_details"]], ["N-101"]
+        )
+        self.assertEqual(
+            [s["code"] for s in resp.data["old_details"]],
+            ["V-101", "V-102"],
+        )
+
+    def test_subject_cannot_be_on_both_sides(self):
+        resp = self.post_equivalence(
+            new_subjects=[self.sub_new.id],
+            old_subjects=[self.sub_new.id],
+            rule_text="",
+            is_active=True,
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_sides_must_belong_to_different_plans(self):
+        resp = self.post_equivalence(
+            new_subjects=[self.sub_old1.id],
+            old_subjects=[self.sub_old2.id],
+            rule_text="",
+            is_active=True,
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_empty_equivalence_is_rejected(self):
+        resp = self.post_equivalence(
+            new_subjects=[], old_subjects=[], rule_text="", is_active=True
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_duplicate_equivalence_is_rejected(self):
+        payload = {
+            "new_subjects": [self.sub_new.id],
+            "old_subjects": [self.sub_old1.id],
+            "rule_text": "",
+            "is_active": True,
+        }
+        self.assertEqual(self.post_equivalence(**payload).status_code, 201)
+        self.assertEqual(self.post_equivalence(**payload).status_code, 400)
+        self.assertEqual(Equivalence.objects.count(), 1)
+
+    def test_certification_with_rule_only_is_accepted(self):
+        resp = self.post_equivalence(
+            new_subjects=[],
+            old_subjects=[],
+            rule_text="Certifica Inglés",
+            is_active=True,
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.data["rule_text"], "Certifica Inglés")
+
+    def test_subject_in_equivalence_cannot_be_deleted(self):
+        equivalence = Equivalence.objects.create(rule_text="")
+        equivalence.new_subjects.add(self.sub_new)
+        resp = self.client.delete(
+            reverse("subject-detail", args=[self.sub_new.id])
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(Subject.objects.filter(id=self.sub_new.id).exists())
+
+    def test_equivalence_can_be_deleted(self):
+        equivalence = Equivalence.objects.create(rule_text="")
+        equivalence.old_subjects.add(self.sub_old1)
+        resp = self.client.delete(
+            reverse("equivalence-detail", args=[equivalence.id])
+        )
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(
+            Equivalence.objects.filter(id=equivalence.id).exists()
+        )
+
+    def test_equivalence_backup_round_trip(self):
+        from apps.academics.management.backup_utils import (
+            export_data,
+            import_data,
+        )
+
+        equivalence = Equivalence.objects.create(
+            rule_text="Certifica Inglés", is_active=True
+        )
+        equivalence.new_subjects.add(self.sub_new)
+        equivalence.old_subjects.add(self.sub_old1, self.sub_old2)
+        payload = export_data()
+        records = payload["models"]["Equivalence"]
+        self.assertEqual(len(records), 1)
+
+        Equivalence.objects.all().delete()
+        summary = import_data(payload)
+        self.assertEqual(summary["Equivalence"], (1, 0))
+        restored = Equivalence.objects.get()
+        self.assertEqual(restored.rule_text, "Certifica Inglés")
+        self.assertEqual(
+            {s.code for s in restored.new_subjects.all()}, {"N-101"}
+        )
+        self.assertEqual(
+            {s.code for s in restored.old_subjects.all()},
+            {"V-101", "V-102"},
+        )
+
+        summary = import_data(payload)
+        self.assertEqual(summary["Equivalence"], (0, 1))
+        self.assertEqual(Equivalence.objects.count(), 1)

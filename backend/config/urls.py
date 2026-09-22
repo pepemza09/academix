@@ -19,6 +19,7 @@ from apps.academics.models import (
     AcademicUnit,
     Campus,
     Career,
+    Equivalence,
     Nomenclador,
     StudyArea,
     StudyPlan,
@@ -364,6 +365,131 @@ class SubjectViewSet(viewsets.ModelViewSet):
     serializer_class = SubjectSerializer
     permission_classes = [IsAuthenticated]
 
+    def destroy(self, request, *args, **kwargs):
+        subject = self.get_object()
+        if (
+            subject.equivalences_as_new.exists()
+            or subject.equivalences_as_old.exists()
+        ):
+            return Response(
+                {
+                    "detail": "No se puede eliminar una materia que participa en equivalencias."
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+def _equivalence_subject_details(subjects):
+    """Detalle de lectura para un lado de la equivalencia (plan reciente primero)."""
+    return [
+        {
+            "id": s.id,
+            "code": s.code,
+            "name": s.name,
+            "study_plan": s.study_area.study_plan_id,
+            "study_plan_code": s.study_area.study_plan.code,
+            "study_plan_title": s.study_area.study_plan.title,
+            "career_name": s.study_area.study_plan.career.name,
+            "career_code": s.study_area.study_plan.career.code,
+        }
+        for s in subjects.order_by("code")
+    ]
+
+
+class EquivalenceSerializer(serializers.ModelSerializer):
+    new_details = serializers.SerializerMethodField()
+    old_details = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Equivalence
+        fields = [
+            "id",
+            "new_subjects",
+            "old_subjects",
+            "new_details",
+            "old_details",
+            "rule_text",
+            "is_active",
+        ]
+
+    def get_new_details(self, obj):
+        return _equivalence_subject_details(obj.new_subjects.all())
+
+    def get_old_details(self, obj):
+        return _equivalence_subject_details(obj.old_subjects.all())
+
+    def validate(self, attrs):
+        if self.instance is not None:
+            default_new = set(
+                self.instance.new_subjects.values_list("id", flat=True)
+            )
+            default_old = set(
+                self.instance.old_subjects.values_list("id", flat=True)
+            )
+            default_rule = self.instance.rule_text or ""
+        else:
+            default_new, default_old, default_rule = set(), set(), ""
+        new_ids = {
+            s.pk for s in attrs.get("new_subjects", [])
+        } if "new_subjects" in attrs else default_new
+        old_ids = {
+            s.pk for s in attrs.get("old_subjects", [])
+        } if "old_subjects" in attrs else default_old
+        rule = attrs.get("rule_text", default_rule)
+        rule = rule.strip() if rule else ""
+        attrs["rule_text"] = rule
+
+        if not new_ids and not old_ids and not rule:
+            raise serializers.ValidationError(
+                "Debe indicar materias de al menos un lado o una regla de certificación."
+            )
+        if new_ids & old_ids:
+            raise serializers.ValidationError(
+                "Una materia no puede estar en ambos lados de la equivalencia."
+            )
+        if new_ids and old_ids:
+            new_plans = set(
+                Subject.objects.filter(pk__in=new_ids).values_list(
+                    "study_area__study_plan_id", flat=True
+                )
+            )
+            old_plans = set(
+                Subject.objects.filter(pk__in=old_ids).values_list(
+                    "study_area__study_plan_id", flat=True
+                )
+            )
+            if new_plans & old_plans:
+                raise serializers.ValidationError(
+                    "Los dos lados de la equivalencia deben pertenecer a planes de estudio distintos."
+                )
+        for candidate in Equivalence.objects.prefetch_related(
+            "new_subjects", "old_subjects"
+        ):
+            if self.instance and candidate.pk == self.instance.pk:
+                continue
+            candidate_rule = (
+                candidate.rule_text.strip() if candidate.rule_text else ""
+            )
+            if (
+                {s.id for s in candidate.new_subjects.all()} == new_ids
+                and {s.id for s in candidate.old_subjects.all()} == old_ids
+                and candidate_rule == rule
+            ):
+                raise serializers.ValidationError(
+                    "Ya existe una equivalencia con esas materias y regla."
+                )
+        return attrs
+
+
+class EquivalenceViewSet(viewsets.ModelViewSet):
+    queryset = Equivalence.objects.prefetch_related(
+        "new_subjects__study_area__study_plan__career",
+        "old_subjects__study_area__study_plan__career",
+    )
+    serializer_class = EquivalenceSerializer
+    permission_classes = [IsAuthenticated]
+
 
 def _nomenclador_code(value):
     """Extrae el código del prefijo 'NN - texto' de un valor del nomenclador."""
@@ -569,6 +695,7 @@ router.register("careers", CareerViewSet, basename="career")
 router.register("study-plans", StudyPlanViewSet, basename="study-plan")
 router.register("study-areas", StudyAreaViewSet, basename="study-area")
 router.register("subjects", SubjectViewSet, basename="subject")
+router.register("equivalences", EquivalenceViewSet, basename="equivalence")
 router.register("nomencladores", NomencladorViewSet, basename="nomenclador")
 router.register("form-options", FormOptionsViewSet, basename="form-options")
 

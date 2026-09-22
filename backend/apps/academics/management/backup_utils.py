@@ -26,9 +26,12 @@ MODEL_ORDER = [
     "StudyPlan",
     "StudyArea",
     "Subject",
+    "Equivalence",
 ]
 
 # Natural key por modelo: campos (incluidos FK) que identifican al objeto.
+# Equivalence no tiene clave escalar única: su identidad es el contenido
+# (conjuntos new/old + regla) y se importa con _import_equivalence_record.
 NATURAL_KEYS = {
     "Nomenclador": ["discipline", "subdiscipline", "specialty"],
     "University": ["name"],
@@ -38,6 +41,7 @@ NATURAL_KEYS = {
     "StudyPlan": ["career", "code"],
     "StudyArea": ["study_plan", "name"],
     "Subject": ["study_area", "code"],
+    "Equivalence": [],
 }
 
 BACKUP_VERSION = 1
@@ -141,6 +145,39 @@ def _resolve(model_name, nk, registry):
     return obj
 
 
+def _import_equivalence_record(model, record, registry):
+    """Importa una equivalencia matcheando por contenido (N:M + regla).
+
+    Devuelve True si fue creada, False si ya existía (actualiza is_active).
+    """
+    new_ids = {
+        _resolve("Subject", nk, registry).pk
+        for nk in record.get("new_subjects", [])
+    }
+    old_ids = {
+        _resolve("Subject", nk, registry).pk
+        for nk in record.get("old_subjects", [])
+    }
+    rule = (record.get("rule_text") or "").strip()
+    is_active = record.get("is_active", True)
+    for candidate in model.objects.prefetch_related(
+        "new_subjects", "old_subjects"
+    ):
+        if (
+            {s.pk for s in candidate.new_subjects.all()} == new_ids
+            and {s.pk for s in candidate.old_subjects.all()} == old_ids
+            and (candidate.rule_text or "").strip() == rule
+        ):
+            if candidate.is_active != is_active:
+                candidate.is_active = is_active
+                candidate.save(update_fields=["is_active"])
+            return False
+    obj = model.objects.create(rule_text=rule, is_active=is_active)
+    obj.new_subjects.set(sorted(new_ids))
+    obj.old_subjects.set(sorted(old_ids))
+    return True
+
+
 def import_data(payload):
     """Carga/fusiona los registros del JSON en la base actual.
 
@@ -163,6 +200,12 @@ def import_data(payload):
         created_count = 0
         updated_count = 0
         for record in records:
+            if model_name == "Equivalence":
+                if _import_equivalence_record(model, record, registry):
+                    created_count += 1
+                else:
+                    updated_count += 1
+                continue
             lookup = {}
             for field_name in NATURAL_KEYS[model_name]:
                 field = model._meta.get_field(field_name)
