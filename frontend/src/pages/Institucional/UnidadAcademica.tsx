@@ -18,6 +18,7 @@ import {
   University,
   universityApi,
 } from "../../api/universities";
+import { usePermissions } from "../../hooks/usePermissions";
 
 const EMPTY_FORM: AcademicUnitPayload = {
   code: "",
@@ -162,6 +163,7 @@ export default function UnidadAcademica() {
     }
   };
 
+  const { canWrite, canDelete } = usePermissions();
   return (
     <div>
       <PageMeta
@@ -171,6 +173,7 @@ export default function UnidadAcademica() {
       <PageBreadcrumb pageTitle="Unidades Académicas" />
 
       <div className="space-y-6">
+        {canWrite && (
         <div className="flex justify-end">
           <Button
             onClick={openCreate}
@@ -197,6 +200,7 @@ export default function UnidadAcademica() {
             Nueva unidad académica
           </Button>
         </div>
+        )}
 
         {error && (
           <div className="rounded-2xl border border-error-200 bg-error-50 px-5 py-4 text-sm text-error-600 dark:border-error-500/20 dark:bg-error-500/10 dark:text-error-400">
@@ -307,6 +311,7 @@ export default function UnidadAcademica() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-2">
+                          {canWrite && (
                           <button
                             onClick={() => openEdit(unit)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:text-gray-400 dark:hover:bg-white/5"
@@ -315,6 +320,8 @@ export default function UnidadAcademica() {
                           >
                             <PencilIcon className="size-4" />
                           </button>
+                          )}
+                          {canDelete && (
                           <button
                             onClick={() => setDeleteTarget(unit)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-error-50 hover:text-error-500 dark:text-gray-400 dark:hover:bg-error-500/10"
@@ -323,6 +330,7 @@ export default function UnidadAcademica() {
                           >
                             <TrashBinIcon className="size-4" />
                           </button>
+                          )}
                         </div>
                       </td>
                     </tr>

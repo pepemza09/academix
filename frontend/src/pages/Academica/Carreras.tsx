@@ -14,6 +14,7 @@ import { AcademicUnit } from "../../api/academicUnits";
 import { Campus } from "../../api/campuses";
 import { University } from "../../api/universities";
 import { formOptionsApi } from "../../api/formOptions";
+import { usePermissions } from "../../hooks/usePermissions";
 
 type CareerForm = CareerPayload & { university: number };
 
@@ -196,12 +197,14 @@ export default function Carreras() {
     }
   };
 
+  const { canWrite, canDelete } = usePermissions();
   return (
     <div>
       <PageMeta title="Academix" description="Gestión de carreras" />
       <PageBreadcrumb pageTitle="Carreras" />
 
       <div className="space-y-6">
+        {canWrite && (
         <div className="flex justify-end">
           <Button
             onClick={openCreate}
@@ -228,6 +231,7 @@ export default function Carreras() {
             Nueva carrera
           </Button>
         </div>
+        )}
 
         {error && (
           <div className="rounded-2xl border border-error-200 bg-error-50 px-5 py-4 text-sm text-error-600 dark:border-error-500/20 dark:bg-error-500/10 dark:text-error-400">
@@ -355,6 +359,7 @@ export default function Carreras() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-2">
+                          {canWrite && (
                           <button
                             onClick={() => openEdit(career)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:text-gray-400 dark:hover:bg-white/5"
@@ -363,6 +368,8 @@ export default function Carreras() {
                           >
                             <PencilIcon className="size-4" />
                           </button>
+                          )}
+                          {canDelete && (
                           <button
                             onClick={() => setDeleteTarget(career)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-error-50 hover:text-error-500 dark:text-gray-400 dark:hover:bg-error-500/10"
@@ -371,6 +378,7 @@ export default function Carreras() {
                           >
                             <TrashBinIcon className="size-4" />
                           </button>
+                          )}
                         </div>
                       </td>
                     </tr>

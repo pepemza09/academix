@@ -14,6 +14,7 @@ import {
   AcademicUnit,
   academicUnitApi,
 } from "../../api/academicUnits";
+import { usePermissions } from "../../hooks/usePermissions";
 
 const EMPTY_FORM: CampusPayload = {
   code: "",
@@ -156,6 +157,7 @@ export default function Sede() {
     }
   };
 
+  const { canWrite, canDelete } = usePermissions();
   return (
     <div>
       <PageMeta
@@ -165,6 +167,7 @@ export default function Sede() {
       <PageBreadcrumb pageTitle="Sede" />
 
       <div className="space-y-6">
+        {canWrite && (
         <div className="flex justify-end">
           <Button
             onClick={openCreate}
@@ -191,6 +194,7 @@ export default function Sede() {
             Nueva sede
           </Button>
         </div>
+        )}
 
         {error && (
           <div className="rounded-2xl border border-error-200 bg-error-50 px-5 py-4 text-sm text-error-600 dark:border-error-500/20 dark:bg-error-500/10 dark:text-error-400">
@@ -295,6 +299,7 @@ export default function Sede() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-2">
+                          {canWrite && (
                           <button
                             onClick={() => openEdit(campus)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:text-gray-400 dark:hover:bg-white/5"
@@ -303,6 +308,8 @@ export default function Sede() {
                           >
                             <PencilIcon className="size-4" />
                           </button>
+                          )}
+                          {canDelete && (
                           <button
                             onClick={() => setDeleteTarget(campus)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-error-50 hover:text-error-500 dark:text-gray-400 dark:hover:bg-error-500/10"
@@ -311,6 +318,7 @@ export default function Sede() {
                           >
                             <TrashBinIcon className="size-4" />
                           </button>
+                          )}
                         </div>
                       </td>
                     </tr>

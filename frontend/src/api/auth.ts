@@ -7,6 +7,7 @@ export interface User {
   is_local: boolean;
   auth_provider: "local" | "google";
   avatar: string | null;
+  role: "admin" | "editor" | "viewer";
   first_name: string;
   last_name: string;
 }

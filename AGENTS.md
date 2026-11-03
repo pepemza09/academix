@@ -107,6 +107,7 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 - `backend/apps/academics/tests.py`: validación funcional de los modelos (los viewsets corren con `promote_to_admin`, el rol `viewer`/`editor` se prueba en `apps/users/tests.py`).
 - `backend/apps/users/tests.py`: `AuthThrottleTests` (fuerza bruta) + `RolePermissionTests` + `RoleApiTests` + `ChangePasswordPolicyTests` (RBAC y política de contraseñas).
 - `frontend/src/api/universities.ts`, `academicUnits.ts`, `campuses.ts`, `careers.ts`, `studyPlans.ts`, `studyAreas.ts`, `subjects.ts`, `equivalences.ts`, `nomencladores.ts`, `formOptions.ts`: servicios API por entidad.
+- `frontend/src/hooks/usePermissions.ts`: gating cosmético por rol (`canWrite`, `canDelete`) que usan las 9 páginas CRUD.
 - `frontend/src/pages/Institucional/Universidad.tsx`: CRUD de universidades.
 - `frontend/src/pages/Institucional/UnidadAcademica.tsx`: CRUD de unidades académicas con combobox de universidad.
 - `frontend/src/pages/Institucional/Sede.tsx`: CRUD de sedes con combobox de unidad académica.
@@ -163,11 +164,11 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 - **CSRF con exposición pública simplificada**: con `DEBUG=false`, si no se declaran `CSRF_TRUSTED_ORIGINS`, `settings.py` los deriva de `ALLOWED_HOSTS` (http+https) — agregar la IP/dominio público a `ALLOWED_HOSTS` es suficiente.
 - **Flags TLS listos por .env** (apagados hasta tener HTTPS): `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_HSTS_SECONDS/_INCLUDE_SUBDOMAINS/_PRELOAD`; además `SECURE_CONTENT_TYPE_NOSNIFF=True` y `X_FRAME_OPTIONS=DENY` siempre.
 - **Runbook para exponer en IP pública** (ver `agents_base.md`): `DEBUG=false` ✓, agregar IP/dominio a `ALLOWED_HOSTS` en `.env` y `docker compose up -d --force-recreate backend`; activar los flags TLS con HTTPS (recomendado); registrar en Google Cloud Console la URI `http(s)://<host>/auth/complete/google-oauth2/`; generar/rotar `DJANGO_SECRET_KEY` si es placeholder.
-- **Pendiente**: front-end cosmético por rol (ocultar/deshabilitar botones CRUD según `role` de `/api/auth/me/` — el backend ya rechaza 403); CSP completo cuando haya HTTPS; idempotencia del backup (`backup_data` antes de pruebas destructivas — regla adoptada tras el incidente de humo).
+- **Pendiente**: CSP completo cuando haya HTTPS; idempotencia del backup (`backup_data` antes de pruebas destructivas — regla adoptada tras el incidente de humo).
+- **Frontend por rol (nov 2026, cosmeticías)**: las 9 páginas CRUD ocultan controles según `role` de `/api/auth/me/` vía `frontend/src/hooks/usePermissions.ts` (`canWrite` = admin|editor, `canDelete` = admin; mientras el rol no resolvió se oculta todo, mínimo privilegio visual). La autorización real sigue siendo backend-only.
 
 ### Siguientes tareas recomendadas de negocio
 
 1. **Exposición en IP pública**: agregar la IP/dominio a `ALLOWED_HOSTS` en `.env` y `docker compose up -d --force-recreate backend`; luego HTTPS + flags TLS (runbook en `agents_base.md`); registrar en Google Cloud Console la URI de callback con el host nuevo.
-2. **Frontend por rol**: ocultar/deshabilitar botones de CRUD según `role` (`admin`/`editor`/`viewer`) que ya expone `/api/auth/me/` — el bloqueo real vive en el backend.
-3. **Cargar los datos en esta copia** (la base está vacía aquí): traer el backup del entorno de referencia y correr `restore_data`, o reimportar con `import_nomenclador` + carga de carrera/plan/materias/equivalencias.
-4. **Expandir el dominio académico**: estudiantes, docentes, cursos, matrículas, periodos, notificaciones (siguiendo el patrón jerárquico con códigos + estado activo y protección de eliminación).
+2. **Cargar los datos en esta copia** (la base está vacía aquí): traer el backup del entorno de referencia y correr `restore_data`, o reimportar con `import_nomenclador` + carga de carrera/plan/materias/equivalencias.
+3. **Expandir el dominio académico**: estudiantes, docentes, cursos, matrículas, periodos, notificaciones (siguiendo el patrón jerárquico con códigos + estado activo y protección de eliminación).
