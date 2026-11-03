@@ -82,8 +82,10 @@ El dominio es jerárquico y usa códigos únicos dentro de su nivel padre y esta
 | Equivalencia | `/api/equivalences/` | `new_subjects` + `old_subjects` (editables, M2M por ids) + `new_details`/`old_details` (lectura), `rule_text` (editable), `is_active`; validación 400 (vacía, solapada, mismo plan, duplicada) |
 | Nomenclador | `/api/nomencladores/` | `discipline`, `subdiscipline`, `specialty` (editables), `is_active`; ordenado por el triple; validación 400 por texto exacto o por códigos |
 | Opciones de formulario | `/api/form-options/` | solo lectura; todas las listas activas en una petición (universidades → materias + nomencladores), cacheadas 5 min en Redis con invalidación por `post_save`/`post_delete` |
+| Roles (RBAC) | `/api/auth/users/` | GET (listado con `id/username/email/role`) y PATCH (`{"user_id", "role"}`) — exclusivo del rol `admin`; `role ∈ {admin, editor, viewer}`; un admin no puede degradar su propio rol (400) |
+| Auth | `/api/auth/me/` | el payload incluye `role` efectivo (para que el frontend eventualmente oculte botones; la autorización real es siempre backend-side) |
 
-Protección de eliminación verificada (regla de integridad referencial), cubierta por la suite (54 tests) y chequeada en vivo contra la API con objetos temporales (los 8 casos → 400, borrado hoja→raíz en cadena → 204):
+Protección de eliminación verificada (regla de integridad referencial), cubierta por la suite (77 tests al nov 2026) y chequeada en vivo contra la API con objetos temporales (los 8 casos → 400, borrado hoja→raíz en cadena → 204):
 - `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204.
 - `DELETE /api/academic-units/{id}/` con sedes o carreras asociadas -> 400; sin dependencias -> 204.
 - `DELETE /api/campuses/{id}/` asociado a carreras (M2M `career.campuses`) -> 400; sin asociación -> 204.
@@ -95,12 +97,15 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 
 ## Archivos clave de negocio
 
-- `backend/config/urls.py`: serializers + viewsets de negocio, `FormOptionsViewSet` y endpoints auth.
+- `backend/config/urls.py`: serializers + viewsets de negocio, `FormOptionsViewSet` y endpoints auth (`users_view` para gestión de roles en `/api/auth/users/`, admin-only).
+- `backend/config/permissions.py`: `RolePermission`, la clase de permisos RBAC que usan **todos** los viewsets de negocio.
+- `backend/apps/users/migrations/0002_profile_role.py`: agrega `Profile.role` y promueve a `admin` a superusuarios/staff existentes (los demás quedan `viewer`).
 - `backend/apps/academics/models.py`: modelos `University`, `AcademicUnit`, `Campus`, `Career`, `StudyPlan`, `StudyArea`, `Subject`, `Equivalence`, `Nomenclador`.
 - `backend/apps/academics/migrations/0001_initial.py` ... `0014_equivalence.py` (incluye `0009_nomenclador_subject_nomenclador`, `0011_studyarea_unique_name_per_plan`, `0012_subject_code_unique_global`, `0013_subject_order_by_code`).
 - `backend/apps/academics/management/commands/`: `backup_data`, `restore_data`, `import_nomenclador`.
 - `backend/apps/academics/management/backup_utils.py`: export/restore con natural keys; `Equivalence` se importa por contenido (conjuntos N:M + regla).
-- `backend/apps/academics/tests.py`: validación funcional de los modelos.
+- `backend/apps/academics/tests.py`: validación funcional de los modelos (los viewsets corren con `promote_to_admin`, el rol `viewer`/`editor` se prueba en `apps/users/tests.py`).
+- `backend/apps/users/tests.py`: `AuthThrottleTests` (fuerza bruta) + `RolePermissionTests` + `RoleApiTests` + `ChangePasswordPolicyTests` (RBAC y política de contraseñas).
 - `frontend/src/api/universities.ts`, `academicUnits.ts`, `campuses.ts`, `careers.ts`, `studyPlans.ts`, `studyAreas.ts`, `subjects.ts`, `equivalences.ts`, `nomencladores.ts`, `formOptions.ts`: servicios API por entidad.
 - `frontend/src/pages/Institucional/Universidad.tsx`: CRUD de universidades.
 - `frontend/src/pages/Institucional/UnidadAcademica.tsx`: CRUD de unidades académicas con combobox de universidad.
@@ -126,11 +131,11 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 ## Handoff de desarrollo: estado actual del dominio
 
 - CRUD funcional (frontend + backend) de: universidades, unidades académicas, sedes, carreras, planes de estudio, áreas, materias, equivalencias y nomenclador, conectados a la API bajo `/api/` con búsqueda y filtro por estado, con protección de eliminación por dependencias.
-- Datos reales cargados: carrera `450` (Contador Público) con planes `CP2026` (duración 4 años, vigente, 6 áreas, **30 materias**) y `CP2019` (duración 5 años, no vigente, 7 áreas, **48 materias**); las **32 equivalencias** 2026↔2019 (29 materia↔materia + 3 certificaciones) están en el backup pero se flushearon de la base viva para probar la carga manual; nomenclador completo con 527 combinaciones.
-- Respaldo vigente en `./backup` (ver `README.md`): 661 registros con natural keys.
+- **Estado de los datos en esta copia del entorno (nov 2026)**: la base se empezó desde cero hoy ( volumen nuevo, superusuario `admin` creado a las 13:30); las tablas de negocio están **vacías** — los datos reales descritos abajo (carrera 450, planes CP2026/CP2019, 78 materias, 32 equivalencias, nomenclador 527) pertenecen al entorno de referencia y **aquí no se cargaron**; `./backup` está vacío en esta copia (solo `.gitignore`). Para esta máquina: levantar datos con `backup_data`/`restore_data` desde el backup del entorno de referencia cuando esté disponible, o reimportar nomenclador con `python manage.py import_nomenclador --directory=...`.
+- **Incidente resuelto (nov 2026, transparencia)**: durante la prueba en vivo del RBAC se eliminó por error la fila `universities id=1` vía la API; resultó ser la fila de humo `TST1` creada por el propio smoke test minutos antes (memoizado en la secuencia `id_seq=1`, archivos heap de las demás tablas de negocio de 0 bytes, autovacuum nunca corrió) — **no se perdió ningún dato de negocio**. Regla adoptada: **antes de cualquier prueba destructiva contra una base con datos, correr `backup_data` (dump JSON con natural keys a `./backup`)** y recién después experimentar.
 - Dashboard (`AcademicsHome.tsx`) es un resumen de solo lectura.
-- Existe un superusuario local `admin` (creado previamente; sin commitear credenciales reales, están en `.env`).
-- Backend: `manage.py check` OK y 54 tests pasan.
+- Existe un superusuario local `admin` (creado previamente; sin commitear credenciales reales, están en `.env`). El rol RBAC del superusuario es efectivamente `admin` (independientemente de su `Profile.role`).
+- Backend: `manage.py check` OK y **77 tests** pasan.
 - CRUD validados de extremo a extremo (create 201, patch 200, list 200, delete 204, duplicados 400) con sesión + CSRF.
 
 ### Optimización de rendimiento (frontend)
@@ -140,8 +145,29 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 - **Backend `/api/auth/me/`**: `user_payload` usa una consulta read-only (`Profile.objects.filter(...).only("avatar")`) en vez de `get_or_create` por request; el perfil se crea solo al subir avatar.
 - Los serializers de listado ya usan `select_related`/`prefetch_related`/`annotate` (sin N+1).
 
+### Hardening de seguridad (noviembre 2026)
+
+- **Auditoría de vulnerabilidades con CVEs correlados y actualización de dependencias/contenedores**: Django `5.2.5 → 5.2.18` (CVEs 2026 de DoS/XSS), Pillow `11.2.1 → 13.0.0` (CVE-2025-48379, ruta crítica del upload de avatar), react-router `^7.1.5 → 7.18.5` (múltiples HIGH: SSR XSS, open redirect, unauth RCE via turbo-stream), `swiper` **eliminado** (CRITICAL prototype pollution; no se usaba su JS, solo CSS sin consumo real), vite `6.1.0 → 6.4.5` + esbuild `0.24.2 → 0.25.12` (CVEs dev-server 2025). Imágenes: postgres `16.10 → 16.15-alpine`, redis `8.2.1 → 8.8.4-alpine`, nginx `1.29.1 → 1.30.6-alpine` (stable), node `22.14.0 → 22.22-alpine`. requirements.txt: DRF `3.18.3`, cors-headers `4.9.0`, environ `0.14.0`, psycopg `3.3.6`, redis-py `8.1.0`, gunicorn `26.2.0`, social-auth-app-django `7.2.0`.
+- `npm audit --omit=dev` → **0 vulnerabilidades** en producción (quedan 12 moderadas solo en devDependencies/eslint tooling). Pin exacto aplicado a `vite` y `react-router` en `package.json`.
+- Validado end-to-end: **77 tests OK** (`5.2.18`; 60 del estado anterior + 17 nuevos de RBAC y política de contraseñas en `apps/users/tests.py`), build de producción del frontend OK (bundle ~289KB), smoke tests en vivo (health 200, API anónima 403, login sin CSRF 403, bad creds 401, lockout 429 verificado en vivo).
+- **HF-1 implementado (nov 2026)**: `frontend/Dockerfile` multi-stage (builder con `npm ci && npm run build` → `nginx:1.30.6-alpine` estático con `frontend/nginx.conf`: `try_files $uri /index.html`, caché immutable en `/assets/`, `frontend/.dockerignore`). El SPA usa `/api` relativo, así que el build no requiere `VITE_API_URL`. El dev server Vite se movió al servicio `frontend-dev` bajo `profiles: ["dev"]` (`docker compose --profile dev up`); ya no se expone :5173 en producción y el proxy `/` de `nginx/default.conf` apunta a `frontend:80`.
+- **HF-2 implementado (nov 2026)**: nuevo `backend/config/rate_limit.py` con límites cache-based (Redis): login 10 fallos/IP/15min, cambio de contraseña 5 fallos de password actual/usuario/15min, `429` al exceder, reseteo al acertar; verificado en vivo (401×10 → 429 → lock, login correcto 200 con reseteo) y por tests. Nginx ahora agrega `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`.
+
+### RBAC y hardening de producción (nov 2026, segunda iteración)
+
+- **HF-3 RBAC implementado (nov 2026)**: `Profile.role ∈ {admin, editor, viewer}` (`apps/users/models.py`, mig `0002_profile_role` promueve a superusuarios/staff existentes a `admin`; los demás usuarios quedan `viewer`). Señal `post_save` crea el perfil con mínimo privilegio (`viewer`) para todo usuario nuevo (incluidos los de Google OAuth). `config/permissions.py` define `RolePermission` (lectura segura para todo usuario autenticado; `POST/PATCH/PUT` para `editor`+; `DELETE` solo `admin`; superusuario siempre `admin` efectivo) y están cableados en los 10 viewsets de negocio. Prohibido degradarse a sí mismo (400). Verificado en vivo: viewer GET 200 / POST-PATCH-DELETE 403; editor POST 201 / PATCH 200 / DELETE 403; admin POST 201 / PATCH 200 / DELETE 204; roles endpoint viewer 403, admin 200.
+- **HF-4 política de contraseñas alineada**: `change_password_view` ya no usa el `min 8` ad-hoc — valida `new_password` con `django.contrib.auth.password_validation.validate_password` (misma `AUTH_PASSWORD_VALIDATORS`: mínimo 12 + `CommonPasswordValidator`), cubierto por tests (`ChangePasswordPolicyTests`).
+- **HF-5 `DEBUG=false`**: `.env` con `DEBUG=false` (ok en producción; en dev se puede volver a encender localmente). Con `DEBUG=false` el panel `/admin/` necesita estáticos servidos: agregado `whitenoise==6.12.0` (middleware en `settings.py`, `CompressedStaticFilesStorage`, `collectstatic` integrado al comando de arranque del backend) — verificado `/admin/login/` y su CSS 200 en producción.
+- **HF-6 Redis con AUTH**: `REDIS_PASSWORD` en `.env` (generada), `REDIS_URL=redis://:<pw>@redis:6379/0` y `redis-server --requirepass` en compose con healthcheck autenticado (verificado: sin password `NOAUTH`, con password `PONG`).
+- **HF-7 hardening de contenedores**: `security_opt: no-new-privileges:true` en los 5 servicios; backend corre **no-root** (`user: 1000:1000`, coincide con el dueño del bind-mount, `HOME=/tmp` para el control socket de gunicorn 26); solo `nginx` publica puertos (80) — backend/db/redis/frontend sin puertos publicados; `.gitignore` ahora excluye `backend/staticfiles/` y `backend/media/`.
+- **CSRF con exposición pública simplificada**: con `DEBUG=false`, si no se declaran `CSRF_TRUSTED_ORIGINS`, `settings.py` los deriva de `ALLOWED_HOSTS` (http+https) — agregar la IP/dominio público a `ALLOWED_HOSTS` es suficiente.
+- **Flags TLS listos por .env** (apagados hasta tener HTTPS): `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_HSTS_SECONDS/_INCLUDE_SUBDOMAINS/_PRELOAD`; además `SECURE_CONTENT_TYPE_NOSNIFF=True` y `X_FRAME_OPTIONS=DENY` siempre.
+- **Runbook para exponer en IP pública** (ver `agents_base.md`): `DEBUG=false` ✓, agregar IP/dominio a `ALLOWED_HOSTS` en `.env` y `docker compose up -d --force-recreate backend`; activar los flags TLS con HTTPS (recomendado); registrar en Google Cloud Console la URI `http(s)://<host>/auth/complete/google-oauth2/`; generar/rotar `DJANGO_SECRET_KEY` si es placeholder.
+- **Pendiente**: front-end cosmético por rol (ocultar/deshabilitar botones CRUD según `role` de `/api/auth/me/` — el backend ya rechaza 403); CSP completo cuando haya HTTPS; idempotencia del backup (`backup_data` antes de pruebas destructivas — regla adoptada tras el incidente de humo).
+
 ### Siguientes tareas recomendadas de negocio
 
-1. **Verificar URIs de redirección de Google OAuth** en Google Cloud Console (ver `agents_base.md` para el callback).
-2. **Expandir el dominio académico**: estudiantes, docentes, cursos, matrículas, periodos, notificaciones (siguiendo el patrón jerárquico con códigos + estado activo y protección de eliminación).
-3. **Reforzar la capa de seguridad**: permisos, validación de CSRF, headers y manejo de sesiones en producción.
+1. **Exposición en IP pública**: agregar la IP/dominio a `ALLOWED_HOSTS` en `.env` y `docker compose up -d --force-recreate backend`; luego HTTPS + flags TLS (runbook en `agents_base.md`); registrar en Google Cloud Console la URI de callback con el host nuevo.
+2. **Frontend por rol**: ocultar/deshabilitar botones de CRUD según `role` (`admin`/`editor`/`viewer`) que ya expone `/api/auth/me/` — el bloqueo real vive en el backend.
+3. **Cargar los datos en esta copia** (la base está vacía aquí): traer el backup del entorno de referencia y correr `restore_data`, o reimportar con `import_nomenclador` + carga de carrera/plan/materias/equivalencias.
+4. **Expandir el dominio académico**: estudiantes, docentes, cursos, matrículas, periodos, notificaciones (siguiendo el patrón jerárquico con códigos + estado activo y protección de eliminación).

@@ -4,14 +4,15 @@ from django.contrib import admin
 from django.urls import include, path
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.password_validation import validate_password
 from django.db.models import Count
 from django.db.models.signals import post_delete, post_save
 from django.core.cache import cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
+from django.core.exceptions import ValidationError
 from django.core.files.images import get_image_dimensions
 from rest_framework import serializers, viewsets
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
@@ -26,7 +27,19 @@ from apps.academics.models import (
     Subject,
     University,
 )
-from apps.users.models import Profile
+from apps.users.models import Profile, user_role
+from config.permissions import RolePermission
+from config.rate_limit import (
+    LOGIN_FAIL_MAX_ATTEMPTS,
+    LOGIN_FAIL_WINDOW_SECONDS,
+    PASSWORD_FAIL_MAX_ATTEMPTS,
+    PASSWORD_FAIL_WINDOW_SECONDS,
+    attempts_exceeded,
+    login_fail_key,
+    password_fail_key,
+    register_attempt,
+    reset_attempts,
+)
 
 
 class UniversitySerializer(serializers.ModelSerializer):
@@ -42,7 +55,7 @@ class UniversityViewSet(viewsets.ModelViewSet):
         academic_unit_count=Count("academic_units")
     )
     serializer_class = UniversitySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
 
     def destroy(self, request, *args, **kwargs):
         university = self.get_object()
@@ -81,7 +94,7 @@ class AcademicUnitViewSet(viewsets.ModelViewSet):
         campus_count=Count("campuses")
     )
     serializer_class = AcademicUnitSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
 
     def destroy(self, request, *args, **kwargs):
         academic_unit = self.get_object()
@@ -122,7 +135,7 @@ class CampusSerializer(serializers.ModelSerializer):
 class CampusViewSet(viewsets.ModelViewSet):
     queryset = Campus.objects.select_related("academic_unit")
     serializer_class = CampusSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
 
     def destroy(self, request, *args, **kwargs):
         campus = self.get_object()
@@ -170,7 +183,7 @@ class CareerViewSet(viewsets.ModelViewSet):
         "academic_unit"
     ).annotate(campus_count=Count("campuses"))
     serializer_class = CareerSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
 
     def destroy(self, request, *args, **kwargs):
         career = self.get_object()
@@ -207,7 +220,7 @@ class StudyPlanSerializer(serializers.ModelSerializer):
 class StudyPlanViewSet(viewsets.ModelViewSet):
     queryset = StudyPlan.objects.select_related("career")
     serializer_class = StudyPlanSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
 
     def destroy(self, request, *args, **kwargs):
         study_plan = self.get_object()
@@ -269,7 +282,7 @@ class StudyAreaSerializer(serializers.ModelSerializer):
 class StudyAreaViewSet(viewsets.ModelViewSet):
     queryset = StudyArea.objects.select_related("study_plan__career")
     serializer_class = StudyAreaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
 
     def destroy(self, request, *args, **kwargs):
         study_area = self.get_object()
@@ -363,7 +376,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
         "study_area__study_plan__career", "nomenclador"
     )
     serializer_class = SubjectSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
 
     def destroy(self, request, *args, **kwargs):
         subject = self.get_object()
@@ -488,7 +501,7 @@ class EquivalenceViewSet(viewsets.ModelViewSet):
         "old_subjects__study_area__study_plan__career",
     )
     serializer_class = EquivalenceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
 
 
 def _nomenclador_code(value):
@@ -558,7 +571,7 @@ class NomencladorSerializer(serializers.ModelSerializer):
 class NomencladorViewSet(viewsets.ModelViewSet):
     queryset = Nomenclador.objects.all()
     serializer_class = NomencladorSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
 
     def destroy(self, request, *args, **kwargs):
         nomenclador = self.get_object()
@@ -599,7 +612,7 @@ class FormOptionsViewSet(viewsets.ReadOnlyModelViewSet):
     con prefetch/select_related apropiado.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RolePermission]
     serializer_class = FormOptionsSerializer
 
     def list(self, request, *args, **kwargs):
@@ -716,18 +729,79 @@ def user_payload(user):
         "is_local": is_local,
         "auth_provider": "local" if is_local else "google",
         "avatar": avatar,
+        "role": user_role(user),
         "first_name": user.first_name,
         "last_name": user.last_name,
     }
 
 
+@require_http_methods(["GET", "PATCH"])
+def users_view(request):
+    """Gestión de roles: listado de usuarios (GET) y asignación de rol (PATCH).
+
+    Exclusivo para admins. PATCH recibe {"user_id": int, "role": str en
+    Profile.Role}. Un admin no puede degradar su propio rol (evita quedarse
+    sin administradores aunque siga existiendo el superusuario de respaldo).
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Autenticación requerida."}, status=401)
+    if user_role(request.user) != Profile.Role.ADMIN:
+        return JsonResponse({"detail": "Solo un administrador puede gestionar roles."}, status=403)
+
+    if request.method == "GET":
+        users = []
+        for profile in Profile.objects.select_related("user").order_by(
+            "user__username"
+        ):
+            users.append(
+                {
+                    "id": profile.user_id,
+                    "username": profile.user.username,
+                    "email": profile.user.email,
+                    "role": user_role(profile.user),
+                }
+            )
+        return JsonResponse({"users": users})
+
+    payload = json.loads(request.body or "{}")
+    target_id = payload.get("user_id")
+    role = payload.get("role")
+    if role not in Profile.Role.values:
+        return JsonResponse(
+            {"detail": f"El rol debe ser uno de: {', '.join(Profile.Role.values)}."},
+            status=400,
+        )
+    if not target_id:
+        return JsonResponse({"detail": "Debes indicar user_id."}, status=400)
+    if target_id == request.user.id and role != Profile.Role.ADMIN:
+        return JsonResponse(
+            {"detail": "No podés cambiar tu propio rol de administrador."},
+            status=400,
+        )
+    profile, _ = Profile.objects.get_or_create(
+        user_id=target_id, defaults={"role": role}
+    )
+    if profile.role != role:
+        profile.role = role
+        profile.save(update_fields=["role", "updated_at"])
+    return JsonResponse({"user_id": target_id, "role": profile.role})
+
+
 @require_http_methods(["POST"])
 @ensure_csrf_cookie
 def login_view(request):
+    fail_key = login_fail_key(request)
+    if attempts_exceeded(fail_key, LOGIN_FAIL_MAX_ATTEMPTS):
+        return JsonResponse(
+            {"detail": "Demasiados intentos fallidos. Probá de nuevo más tarde."},
+            status=429,
+        )
     payload = json.loads(request.body or "{}")
     user = authenticate(request, username=payload.get("username"), password=payload.get("password"))
     if user is None:
+        register_attempt(fail_key, LOGIN_FAIL_WINDOW_SECONDS)
         return JsonResponse({"detail": "Credenciales inválidas."}, status=401)
+    reset_attempts(fail_key)
     login(request, user)
     return JsonResponse(user_payload(user))
 
@@ -787,18 +861,37 @@ def change_password_view(request):
             status=400,
         )
 
+    fail_key = password_fail_key(request.user)
+    if attempts_exceeded(fail_key, PASSWORD_FAIL_MAX_ATTEMPTS):
+        return JsonResponse(
+            {"detail": "Demasiados intentos fallidos. Probá de nuevo más tarde."},
+            status=429,
+        )
+
     payload = json.loads(request.body or "{}")
     current_password = payload.get("current_password")
     new_password = payload.get("new_password")
 
     if not request.user.check_password(current_password or ""):
+        register_attempt(fail_key, PASSWORD_FAIL_WINDOW_SECONDS)
         return JsonResponse(
             {"detail": "La contraseña actual es incorrecta."}, status=400
         )
 
-    if not new_password or len(new_password) < 8:
+    reset_attempts(fail_key)
+
+    # Misma política que AUTH_PASSWORD_VALIDATORS (mínimo 12 + común).
+    try:
+        validate_password(new_password or "", user=request.user)
+    except ValidationError as exc:
         return JsonResponse(
-            {"detail": "La nueva contraseña debe tener al menos 8 caracteres."},
+            {
+                "detail": (
+                    exc.messages[0]
+                    if getattr(exc, "messages", None)
+                    else "Contraseña inválida."
+                )
+            },
             status=400,
         )
 
@@ -818,9 +911,10 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("health/", health),
     path("api/", include(router.urls)),
-    path("api/auth/login/", login_view),
+    path("api/auth/login/", login_view, name="login"),
     path("api/auth/me/", me),
-    path("api/auth/change-password/", change_password_view),
+    path("api/auth/users/", users_view, name="users"),
+    path("api/auth/change-password/", change_password_view, name="change-password"),
     path("api/auth/upload-avatar/", upload_avatar_view),
     path("api/auth/logout/", logout_view),
     path("auth/", include("social_django.urls", namespace="social")),

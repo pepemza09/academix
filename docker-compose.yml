@@ -1,8 +1,12 @@
 services:
+  # Hardening común: no-new-privileges en todos los servicios. El backend
+  # corre como uid 1000 (no root). Redis exige AUTH (defense in depth).
   db:
-    image: postgres:16.10-alpine
+    image: postgres:16.15-alpine
     restart: unless-stopped
     env_file: .env
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -12,13 +16,16 @@ services:
       retries: 10
 
   redis:
-    image: redis:8.2.1-alpine
+    image: redis:8.8.4-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    env_file: .env
+    command: sh -c 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"'
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -27,7 +34,12 @@ services:
     build: ./backend
     restart: unless-stopped
     env_file: .env
-    command: sh -c "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    user: "1000:1000"
+    environment:
+      HOME: /tmp
+    security_opt:
+      - no-new-privileges:true
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
     volumes:
       - ./backend:/app
       - ./backup:/backup
@@ -37,9 +49,28 @@ services:
       redis:
         condition: service_healthy
 
+  # Producción: imagen multi-stage (build de Vite + Nginx estático).
+  # La SPA consume /api relativo via el servicio `nginx`.
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - backend
+
+  # Desarrollo con hot-reload de Vite:
+  #   docker compose --profile dev up frontend-dev nginx
+  frontend-dev:
+    profiles: ["dev"]
+    build:
+      context: ./frontend
+      target: builder
+    command: npm run dev -- --host 0.0.0.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "5173:5173"
     environment:
@@ -51,8 +82,10 @@ services:
       - backend
 
   nginx:
-    image: nginx:1.29.1-alpine
+    image: nginx:1.30.6-alpine
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "80:80"
     volumes:

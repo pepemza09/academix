@@ -9,6 +9,14 @@ from django.core.management import call_command
 from django.test import Client, TestCase
 from django.urls import reverse
 
+from apps.users.models import Profile
+
+
+def promote_to_admin(user):
+    """Los tests de negocio ejercitan CRUD completo con rol ADMIN; la
+    autorización por rol tiene su propia suite en apps.users."""
+    Profile.objects.filter(user=user).update(role=Profile.Role.ADMIN)
+
 from .models import (
     AcademicUnit,
     Campus,
@@ -364,6 +372,7 @@ class DeleteProtectionApiTests(TestCase):
         cls.user = get_user_model().objects.create_user(
             username="tester", password="testpass"
         )
+        promote_to_admin(cls.user)
 
     def setUp(self):
         self.client = Client()
@@ -701,6 +710,7 @@ class FormOptionsEndpointTests(TestCase):
         cls.user = get_user_model().objects.create_user(
             username="tester", password="testpass"
         )
+        promote_to_admin(cls.user)
 
     def setUp(self):
         self.client = Client()
@@ -861,6 +871,7 @@ class FormOptionsCacheInvalidationTests(TestCase):
         cls.user = get_user_model().objects.create_user(
             username="tester", password="testpass"
         )
+        promote_to_admin(cls.user)
 
     def setUp(self):
         self.client = Client()
@@ -915,6 +926,7 @@ class EquivalenceApiTests(TestCase):
         cls.user = get_user_model().objects.create_user(
             username="tester", password="testpass"
         )
+        promote_to_admin(cls.user)
 
     def setUp(self):
         self.client = Client()

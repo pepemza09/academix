@@ -231,3 +231,7 @@ backup/*
 # Academix: insumos de carga manual (planillas, JSON de origen) no se versionan
 auto/
 
+
+# Academix: artefactos locales de backend
+backend/staticfiles/
+backend/media/
