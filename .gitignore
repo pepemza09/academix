@@ -235,3 +235,6 @@ auto/
 # Academix: artefactos locales de backend
 backend/staticfiles/
 backend/media/
+
+# Academix: análisis del dashboard FCE con credenciales de acceso — uso interno, no versionar
+dashboard.md
