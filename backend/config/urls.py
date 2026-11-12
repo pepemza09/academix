@@ -125,11 +125,33 @@ class CampusSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "code",
+            "numeric_code",
             "name",
             "academic_unit",
             "academic_unit_name",
             "is_active",
         ]
+
+    def validate(self, data):
+        numeric_code = data.get("numeric_code")
+        if numeric_code is None:
+            return data
+        academic_unit = data.get("academic_unit")
+        if academic_unit is None and self.instance is not None:
+            academic_unit = self.instance.academic_unit
+        if academic_unit is not None:
+            duplicate = Campus.objects.filter(
+                academic_unit=academic_unit, numeric_code=numeric_code
+            )
+            if self.instance is not None:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+            if duplicate.exists():
+                raise serializers.ValidationError(
+                    {
+                        "numeric_code": "Ya existe una sede con ese código numérico en la unidad académica."
+                    }
+                )
+        return data
 
 
 class CampusViewSet(viewsets.ModelViewSet):
@@ -158,7 +180,12 @@ class CareerSerializer(serializers.ModelSerializer):
 
     def get_campus_details(self, obj):
         return [
-            {"id": campus.id, "code": campus.code, "name": campus.name}
+            {
+                "id": campus.id,
+                "code": campus.code,
+                "numeric_code": campus.numeric_code,
+                "name": campus.name,
+            }
             for campus in obj.campuses.all()
         ]
 

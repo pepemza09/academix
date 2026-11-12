@@ -24,7 +24,7 @@ El dominio es jerárquico y usa códigos únicos dentro de su nivel padre y esta
 - **No se puede eliminar** si tiene sedes o carreras asociadas (400).
 
 ### Campus (Sede)
-- Pertenece a una `AcademicUnit`; campos: `code`, `name`, `is_active`.
+- Pertenece a una `AcademicUnit`; campos: `code`, `numeric_code` (**código sede numérico, entero opcional** ej. `3` que se muestra `03`; único dentro de la unidad académica, 400 si se duplica), `name`, `is_active`.
 
 ### Career (Carrera)
 - Pertenece a una `AcademicUnit` (**la facultad es la `AcademicUnit`**).
@@ -74,8 +74,8 @@ El dominio es jerárquico y usa códigos únicos dentro de su nivel padre y esta
 |---------|----------|-------|
 | Universidad | `/api/universities/` | annotate `academic_unit_count` |
 | Unidad académica | `/api/academic-units/` | expone `university` (editable), `university_name`, `campus_count` |
-| Sede | `/api/campuses/` | expone `academic_unit` (editable), `academic_unit_name` |
-| Carrera | `/api/careers/` | `academic_unit` (editable), `academic_unit_name`, `campuses` (editable), `campus_count`, `campus_details` (lectura: `[{id, code, name}]`) |
+| Sede | `/api/campuses/` | expone `academic_unit` (editable), `academic_unit_name`, `numeric_code` (código sede numérico, único por unidad académica) |
+| Carrera | `/api/careers/` | `academic_unit` (editable), `academic_unit_name`, `campuses` (editable), `campus_count`, `campus_details` (lectura: `[{id, code, numeric_code, name}]`) |
 | Plan de estudio | `/api/study-plans/` | `career` (editable), `career_name`, `career_code`, `intermediate_title`, `duration_years`, `is_active`, `is_current` |
 | Área | `/api/study-areas/` | `study_plan` (editable), `study_plan_code`, `study_plan_title`, `career_name`, `career_code`, `is_active` |
 | Materia | `/api/subjects/` | `study_area` (editable), `study_area_name`, `study_plan_code/title`, `career_name/code`, `period` (editable) + `period_label`, `year` (validado contra `duration_years`), `duration_years`, `nomenclador` (editable) + `nomenclador_extra` (editable) + `nomenclador_label`, `is_active`; `code` único global; no se elimina si participa en equivalencias |
@@ -85,7 +85,7 @@ El dominio es jerárquico y usa códigos únicos dentro de su nivel padre y esta
 | Roles (RBAC) | `/api/auth/users/` | GET (listado con `id/username/email/role`) y PATCH (`{"user_id", "role"}`) — exclusivo del rol `admin`; `role ∈ {admin, editor, viewer}`; un admin no puede degradar su propio rol (400) |
 | Auth | `/api/auth/me/` | el payload incluye `role` efectivo (para que el frontend eventualmente oculte botones; la autorización real es siempre backend-side) |
 
-Protección de eliminación verificada (regla de integridad referencial), cubierta por la suite (77 tests al nov 2026) y chequeada en vivo contra la API con objetos temporales (los 8 casos → 400, borrado hoja→raíz en cadena → 204):
+Protección de eliminación verificada (regla de integridad referencial), cubierta por la suite (85 tests al nov 2026) y chequeada en vivo contra la API con objetos temporales (los 8 casos → 400, borrado hoja→raíz en cadena → 204):
 - `DELETE /api/universities/{id}/` con unidades asociadas -> 400; sin unidades -> 204.
 - `DELETE /api/academic-units/{id}/` con sedes o carreras asociadas -> 400; sin dependencias -> 204.
 - `DELETE /api/campuses/{id}/` asociado a carreras (M2M `career.campuses`) -> 400; sin asociación -> 204.
@@ -101,7 +101,7 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 - `backend/config/permissions.py`: `RolePermission`, la clase de permisos RBAC que usan **todos** los viewsets de negocio.
 - `backend/apps/users/migrations/0002_profile_role.py`: agrega `Profile.role` y promueve a `admin` a superusuarios/staff existentes (los demás quedan `viewer`).
 - `backend/apps/academics/models.py`: modelos `University`, `AcademicUnit`, `Campus`, `Career`, `StudyPlan`, `StudyArea`, `Subject`, `Equivalence`, `Nomenclador`.
-- `backend/apps/academics/migrations/0001_initial.py` ... `0014_equivalence.py` (incluye `0009_nomenclador_subject_nomenclador`, `0011_studyarea_unique_name_per_plan`, `0012_subject_code_unique_global`, `0013_subject_order_by_code`).
+- `backend/apps/academics/migrations/0001_initial.py` ... `0015_campus_numeric_code_and_more.py` (incluye `0009_nomenclador_subject_nomenclador`, `0011_studyarea_unique_name_per_plan`, `0012_subject_code_unique_global`, `0013_subject_order_by_code`).
 - `backend/apps/academics/management/commands/`: `backup_data`, `restore_data`, `import_nomenclador`.
 - `backend/apps/academics/management/backup_utils.py`: export/restore con natural keys; `Equivalence` se importa por contenido (conjuntos N:M + regla).
 - `backend/apps/academics/tests.py`: validación funcional de los modelos (los viewsets corren con `promote_to_admin`, el rol `viewer`/`editor` se prueba en `apps/users/tests.py`).
@@ -110,7 +110,7 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 - `frontend/src/hooks/usePermissions.ts`: gating cosmético por rol (`canWrite`, `canDelete`) que usan las 9 páginas CRUD.
 - `frontend/src/pages/Institucional/Universidad.tsx`: CRUD de universidades.
 - `frontend/src/pages/Institucional/UnidadAcademica.tsx`: CRUD de unidades académicas con combobox de universidad.
-- `frontend/src/pages/Institucional/Sede.tsx`: CRUD de sedes con combobox de unidad académica.
+- `frontend/src/pages/Institucional/Sede.tsx`: CRUD de sedes con combobox de unidad académica y campo "Código sede" numérico (entero, se muestra con pad de 2 dígitos ej. `03`).
 - `frontend/src/pages/Academica/Carreras.tsx`: CRUD de carreras (universidad → unidad académica + multiselección de sedes).
 - `frontend/src/pages/Academica/Planes.tsx`: CRUD de planes de estudio (universidad → unidad académica → carrera), con duración en años.
 - `frontend/src/pages/Academica/Areas.tsx`: CRUD de áreas (universidad → unidad académica → carrera → plan).
@@ -132,11 +132,11 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 ## Handoff de desarrollo: estado actual del dominio
 
 - CRUD funcional (frontend + backend) de: universidades, unidades académicas, sedes, carreras, planes de estudio, áreas, materias, equivalencias y nomenclador, conectados a la API bajo `/api/` con búsqueda y filtro por estado, con protección de eliminación por dependencias.
-- **Estado de los datos en esta copia del entorno (nov 2026)**: la base se empezó desde cero hoy ( volumen nuevo, superusuario `admin` creado a las 13:30); las tablas de negocio están **vacías** — los datos reales descritos abajo (carrera 450, planes CP2026/CP2019, 78 materias, 32 equivalencias, nomenclador 527) pertenecen al entorno de referencia y **aquí no se cargaron**; `./backup` está vacío en esta copia (solo `.gitignore`). Para esta máquina: levantar datos con `backup_data`/`restore_data` desde el backup del entorno de referencia cuando esté disponible, o reimportar nomenclador con `python manage.py import_nomenclador --directory=...`.
+- **Estado de los datos en esta copia del entorno (nov 2026, actualizado)**: la base ya **no está vacía** — se restauró el backup del entorno de referencia (`academix_backup_20260922_174253.json`) y hoy contiene el dataset completo: 1 universidad, 1 unidad académica, 2 sedes, 3 carreras, 4 planes, 13 áreas, 78 materias, 32 equivalencias y 527 nomencladores (661 registros). Además existe un backup fresco generado el 12-nov-2026 (`academix_backup_20261112_144607.json`) tras la migración de `campus.numeric_code`. Antes de seguir experimentando con datos, regenerar `backup_data` si pasaron cambios.
 - **Incidente resuelto (nov 2026, transparencia)**: durante la prueba en vivo del RBAC se eliminó por error la fila `universities id=1` vía la API; resultó ser la fila de humo `TST1` creada por el propio smoke test minutos antes (memoizado en la secuencia `id_seq=1`, archivos heap de las demás tablas de negocio de 0 bytes, autovacuum nunca corrió) — **no se perdió ningún dato de negocio**. Regla adoptada: **antes de cualquier prueba destructiva contra una base con datos, correr `backup_data` (dump JSON con natural keys a `./backup`)** y recién después experimentar.
 - Dashboard (`AcademicsHome.tsx`) es un resumen de solo lectura.
 - Existe un superusuario local `admin` (creado previamente; sin commitear credenciales reales, están en `.env`). El rol RBAC del superusuario es efectivamente `admin` (independientemente de su `Profile.role`).
-- Backend: `manage.py check` OK y **77 tests** pasan.
+- Backend: `manage.py check` OK y **85 tests** pasan.
 - CRUD validados de extremo a extremo (create 201, patch 200, list 200, delete 204, duplicados 400) con sesión + CSRF.
 
 ### Optimización de rendimiento (frontend)
@@ -150,7 +150,7 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 
 - **Auditoría de vulnerabilidades con CVEs correlados y actualización de dependencias/contenedores**: Django `5.2.5 → 5.2.18` (CVEs 2026 de DoS/XSS), Pillow `11.2.1 → 13.0.0` (CVE-2025-48379, ruta crítica del upload de avatar), react-router `^7.1.5 → 7.18.5` (múltiples HIGH: SSR XSS, open redirect, unauth RCE via turbo-stream), `swiper` **eliminado** (CRITICAL prototype pollution; no se usaba su JS, solo CSS sin consumo real), vite `6.1.0 → 6.4.5` + esbuild `0.24.2 → 0.25.12` (CVEs dev-server 2025). Imágenes: postgres `16.10 → 16.15-alpine`, redis `8.2.1 → 8.8.4-alpine`, nginx `1.29.1 → 1.30.6-alpine` (stable), node `22.14.0 → 22.22-alpine`. requirements.txt: DRF `3.18.3`, cors-headers `4.9.0`, environ `0.14.0`, psycopg `3.3.6`, redis-py `8.1.0`, gunicorn `26.2.0`, social-auth-app-django `7.2.0`.
 - `npm audit --omit=dev` → **0 vulnerabilidades** en producción (quedan 12 moderadas solo en devDependencies/eslint tooling). Pin exacto aplicado a `vite` y `react-router` en `package.json`.
-- Validado end-to-end: **77 tests OK** (`5.2.18`; 60 del estado anterior + 17 nuevos de RBAC y política de contraseñas en `apps/users/tests.py`), build de producción del frontend OK (bundle ~289KB), smoke tests en vivo (health 200, API anónima 403, login sin CSRF 403, bad creds 401, lockout 429 verificado en vivo).
+- Validado end-to-end: **85 tests OK** (`5.2.18`), build de producción del frontend OK, smoke tests en vivo (health 200, API anónima 403, login sin CSRF 403, bad creds 401, lockout 429 verificado en vivo).
 - **HF-1 implementado (nov 2026)**: `frontend/Dockerfile` multi-stage (builder con `npm ci && npm run build` → `nginx:1.30.6-alpine` estático con `frontend/nginx.conf`: `try_files $uri /index.html`, caché immutable en `/assets/`, `frontend/.dockerignore`). El SPA usa `/api` relativo, así que el build no requiere `VITE_API_URL`. El dev server Vite se movió al servicio `frontend-dev` bajo `profiles: ["dev"]` (`docker compose --profile dev up`); ya no se expone :5173 en producción y el proxy `/` de `nginx/default.conf` apunta a `frontend:80`.
 - **HF-2 implementado (nov 2026)**: nuevo `backend/config/rate_limit.py` con límites cache-based (Redis): login 10 fallos/IP/15min, cambio de contraseña 5 fallos de password actual/usuario/15min, `429` al exceder, reseteo al acertar; verificado en vivo (401×10 → 429 → lock, login correcto 200 con reseteo) y por tests. Nginx ahora agrega `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`.
 
@@ -170,5 +170,5 @@ Protección de eliminación verificada (regla de integridad referencial), cubier
 ### Siguientes tareas recomendadas de negocio
 
 1. **Exposición en IP pública**: agregar la IP/dominio a `ALLOWED_HOSTS` en `.env` y `docker compose up -d --force-recreate backend`; luego HTTPS + flags TLS (runbook en `agents_base.md`); registrar en Google Cloud Console la URI de callback con el host nuevo.
-2. **Cargar los datos en esta copia** (la base está vacía aquí): traer el backup del entorno de referencia y correr `restore_data`, o reimportar con `import_nomenclador` + carga de carrera/plan/materias/equivalencias.
+2. ~~Cargar los datos en esta copia~~ **Hecho (12-nov-2026)**: la base ya contiene el dataset del entorno de referencia; mantener backups frescos con `backup_data`.
 3. **Expandir el dominio académico**: estudiantes, docentes, cursos, matrículas, periodos, notificaciones (siguiendo el patrón jerárquico con códigos + estado activo y protección de eliminación).

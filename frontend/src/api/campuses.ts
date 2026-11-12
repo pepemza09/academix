@@ -3,6 +3,7 @@ import { api } from "./client";
 export interface Campus {
   id: number;
   code: string;
+  numeric_code: number | null;
   name: string;
   academic_unit: number;
   academic_unit_name: string;
@@ -11,7 +12,7 @@ export interface Campus {
 
 export type CampusPayload = Pick<
   Campus,
-  "code" | "name" | "academic_unit" | "is_active"
+  "code" | "numeric_code" | "name" | "academic_unit" | "is_active"
 >;
 
 export const campusApi = {

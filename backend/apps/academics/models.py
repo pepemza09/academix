@@ -1,3 +1,4 @@
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -38,6 +39,12 @@ class Campus(models.Model):
         AcademicUnit, on_delete=models.CASCADE, related_name="campuses"
     )
     code = models.CharField(max_length=30)
+    numeric_code = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Código sede numérico (ej. 03).",
+    )
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -49,7 +56,11 @@ class Campus(models.Model):
             models.UniqueConstraint(
                 fields=["academic_unit", "code"],
                 name="unique_campus_code_per_academic_unit",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["academic_unit", "numeric_code"],
+                name="unique_campus_numeric_code_per_academic_unit",
+            ),
         ]
         indexes = [models.Index(fields=["academic_unit", "is_active"])]
 

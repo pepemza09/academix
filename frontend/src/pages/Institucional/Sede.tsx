@@ -18,10 +18,16 @@ import { usePermissions } from "../../hooks/usePermissions";
 
 const EMPTY_FORM: CampusPayload = {
   code: "",
+  numeric_code: null,
   name: "",
   academic_unit: 0,
   is_active: true,
 };
+
+export const formatNumericCode = (value: number | null): string =>
+  value === null || value === undefined
+    ? "—"
+    : String(value).padStart(2, "0");
 
 export default function Sede() {
   const [campuses, setCampuses] = useState<Campus[]>([]);
@@ -82,6 +88,9 @@ export default function Sede() {
       !term ||
       campus.name.toLowerCase().includes(term) ||
       campus.code.toLowerCase().includes(term) ||
+      (campus.numeric_code !== null &&
+        (String(campus.numeric_code).includes(term) ||
+          formatNumericCode(campus.numeric_code).includes(term))) ||
       campus.academic_unit_name.toLowerCase().includes(term);
     const matchesStatus =
       statusFilter === "all" ||
@@ -101,6 +110,7 @@ export default function Sede() {
     setEditing(campus);
     setForm({
       code: campus.code,
+      numeric_code: campus.numeric_code,
       name: campus.name,
       academic_unit: campus.academic_unit,
       is_active: campus.is_active,
@@ -117,6 +127,13 @@ export default function Sede() {
     }
     if (!form.code.trim() || !form.name.trim()) {
       setFormError("El código y el nombre son obligatorios.");
+      return;
+    }
+    if (
+      form.numeric_code !== null &&
+      (!Number.isInteger(form.numeric_code) || form.numeric_code < 0)
+    ) {
+      setFormError("El código sede debe ser un número entero mayor o igual a 0.");
       return;
     }
     setSaving(true);
@@ -269,6 +286,7 @@ export default function Sede() {
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-white/[0.02] dark:text-gray-400">
                   <tr>
                     <th className="px-5 py-3">Código</th>
+                    <th className="px-5 py-3">Código sede</th>
                     <th className="px-5 py-3">Nombre</th>
                     <th className="px-5 py-3">Unidad académica</th>
                     <th className="px-5 py-3">Estado</th>
@@ -283,6 +301,9 @@ export default function Sede() {
                     >
                       <td className="px-5 py-4 font-medium text-gray-900 dark:text-white">
                         {campus.code}
+                      </td>
+                      <td className="px-5 py-4 font-medium text-gray-900 dark:text-white">
+                        {formatNumericCode(campus.numeric_code)}
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-gray-300">
                         {campus.name}
@@ -370,6 +391,24 @@ export default function Sede() {
                 />
               </div>
               <div>
+                <Label htmlFor="campus-numeric-code">Código sede (número)</Label>
+                <Input
+                  id="campus-numeric-code"
+                  type="number"
+                  min="0"
+                  step={1}
+                  placeholder="Ej. 03"
+                  value={form.numeric_code ?? ""}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      numeric_code:
+                        e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div className="sm:col-span-2">
                 <Label htmlFor="campus-name">Nombre</Label>
                 <Input
                   id="campus-name"

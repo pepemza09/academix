@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import call_command
+from django.db import IntegrityError
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -78,6 +79,172 @@ class CampusModelTests(TestCase):
         )
         self.assertEqual(str(campus), "SED-01 - Sede Centro")
         self.assertEqual(campus.academic_unit, unit)
+
+
+class CampusNumericCodeTests(TestCase):
+    def setUp(self):
+        self.university = University.objects.create(name="Universidad")
+        self.unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Tecnología",
+            name="Facultad de Tecnología",
+            university=self.university,
+        )
+
+    def test_campus_numeric_code_is_optional(self):
+        campus = Campus.objects.create(
+            code="SED-01", name="Sede Centro", academic_unit=self.unit
+        )
+        self.assertIsNone(campus.numeric_code)
+
+    def test_campus_numeric_code_is_stored_as_integer(self):
+        campus = Campus.objects.create(
+            code="SED-01",
+            name="Sede Centro",
+            numeric_code=3,
+            academic_unit=self.unit,
+        )
+        self.assertEqual(campus.numeric_code, 3)
+
+    def test_campus_numeric_code_unique_per_academic_unit(self):
+        Campus.objects.create(
+            code="SED-01",
+            name="Sede Centro",
+            numeric_code=3,
+            academic_unit=self.unit,
+        )
+        other_unit = AcademicUnit.objects.create(
+            code="FAC-02",
+            short_name="Exactas",
+            name="Facultad de Exactas",
+            university=self.university,
+        )
+        Campus.objects.create(
+            code="SED-10",
+            name="Sede Norte",
+            numeric_code=3,
+            academic_unit=other_unit,
+        )
+        with self.assertRaises(IntegrityError):
+            Campus.objects.create(
+                code="SED-02",
+                name="Sede Oeste",
+                numeric_code=3,
+                academic_unit=self.unit,
+            )
+
+    def test_campus_numeric_code_can_repeat_across_units(self):
+        other_unit = AcademicUnit.objects.create(
+            code="FAC-02",
+            short_name="Exactas",
+            name="Facultad de Exactas",
+            university=self.university,
+        )
+        Campus.objects.create(
+            code="SED-01",
+            name="Sede Centro",
+            numeric_code=3,
+            academic_unit=self.unit,
+        )
+        campus2 = Campus.objects.create(
+            code="SED-10",
+            name="Sede Norte",
+            numeric_code=3,
+            academic_unit=other_unit,
+        )
+        self.assertEqual(campus2.numeric_code, 3)
+
+
+class CampusNumericCodeApiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            username="tester", password="testpass"
+        )
+        promote_to_admin(cls.user)
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(username="tester", password="testpass")
+        self.university = University.objects.create(
+            name="Universidad de Prueba"
+        )
+        self.unit = AcademicUnit.objects.create(
+            code="FAC-01",
+            short_name="Tecnología",
+            name="Facultad de Tecnología",
+            university=self.university,
+        )
+
+    def test_create_campus_with_numeric_code_returns_201(self):
+        resp = self.client.post(
+            reverse("campus-list"),
+            data=json.dumps(
+                {
+                    "code": "SED-01",
+                    "numeric_code": 3,
+                    "name": "Sede Centro",
+                    "academic_unit": self.unit.id,
+                    "is_active": True,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()["numeric_code"], 3)
+
+    def test_duplicate_numeric_code_in_same_unit_returns_400(self):
+        Campus.objects.create(
+            code="SED-01",
+            name="Sede Centro",
+            numeric_code=3,
+            academic_unit=self.unit,
+        )
+        resp = self.client.post(
+            reverse("campus-list"),
+            data=json.dumps(
+                {
+                    "code": "SED-02",
+                    "numeric_code": 3,
+                    "name": "Sede Oeste",
+                    "academic_unit": self.unit.id,
+                    "is_active": True,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("numeric_code", json.dumps(resp.json()))
+
+    def test_editing_campus_keeps_its_own_numeric_code(self):
+        campus = Campus.objects.create(
+            code="SED-01",
+            name="Sede Centro",
+            numeric_code=3,
+            academic_unit=self.unit,
+        )
+        resp = self.client.patch(
+            reverse("campus-detail", args=[campus.id]),
+            data=json.dumps({"name": "Sede Centro Renovada"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_negative_numeric_code_returns_400(self):
+        resp = self.client.post(
+            reverse("campus-list"),
+            data=json.dumps(
+                {
+                    "code": "SED-01",
+                    "numeric_code": -1,
+                    "name": "Sede Centro",
+                    "academic_unit": self.unit.id,
+                    "is_active": True,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
 
 
 class AcademicUnitProtectionTests(TestCase):

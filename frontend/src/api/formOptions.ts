@@ -21,6 +21,7 @@ export interface FormOptions {
   campuses: Array<{
     id: number;
     code: string;
+    numeric_code: number | null;
     name: string;
     academic_unit: number;
     academic_unit_name: string;
@@ -38,6 +39,7 @@ export interface FormOptions {
     campus_details: Array<{
       id: number;
       code: string;
+      numeric_code: number | null;
       name: string;
     }>;
     is_active: boolean;

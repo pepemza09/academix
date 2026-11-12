@@ -9,7 +9,7 @@ export interface Career {
   academic_unit_name: string;
   campuses: number[];
   campus_count: number;
-  campus_details: { id: number; code: string; name: string }[];
+  campus_details: { id: number; code: string; numeric_code: number | null; name: string }[];
   is_active: boolean;
 }
 
